@@ -22648,14 +22648,6 @@
 
 	}
 
-	/**
-	 * @author supereggbert / http://www.paulbrunt.co.uk/
-	 * @author mrdoob / http://mrdoob.com/
-	 * @author alteredq / http://alteredqualia.com/
-	 * @author szimek / https://github.com/szimek/
-	 * @author tschw
-	 */
-
 	function WebGLRenderer( parameters ) {
 
 		console.log( 'THREE.WebGLRenderer', REVISION );
@@ -23779,16 +23771,24 @@
 
 			if ( this.numDepthPeelingPasses > 1 ) {
 
-				this.initBuffers_();
+				var gl = this.context;
+
+				// var glState = new GLRestoreState( gl );
+				// this.prepareDbBuffers_( camera );
 
 				for ( var dpPass = 0; dpPass < this.numDepthPeelingPasses; dpPass ++ ) {
 
+					// this.prepareDbBuffersForDraw_( gl, readId, writeId, dpPass === 0 );
+
 					this.renderInner( currentRenderList, scene, camera, forceClear );
-					this.postRenderInnerProcessBuffers();
+
+					// this.blendBack_( gl, writeId );
 
 				}
 
-				this.postDPLoopProcessBuffers();
+				// this.blendFinal_( gl, writeId );
+				// glState.restore( gl );
+				// gl.depthMask( true );
 
 			} else {
 
@@ -23868,6 +23868,53 @@
 			}
 
 		}
+
+		this.prepareDbBuffers_ = function ( camera ) {
+
+			this.initBuffers_();
+
+			var gl = this.context;
+			gl.useProgram( this.finalProgramData.program );
+			gl.uniform1i( this.finalProgramData.uBackColorBuffer, 6 );
+
+			gl.enable( 3042 );
+			gl.disable( 2929 );
+			gl.enable( 2884 );
+
+			gl.useProgram( this.depthPeelingProgram );
+			camera.updateProjectionMatrix();
+			camera.clearViewOffset();
+			gl.uniformMatrix4fv( this.projectionMatrix, false, camera.projectionMatrix.elements );
+
+			this.initializeBuffersForPass_( gl );
+
+		};
+
+		this.initializeBuffersForPass_ = function ( gl ) {
+
+			gl.bindFramebuffer( 36009, this.blendBackBuffer );
+			gl.clearColor( 0, 0, 0, 0 );
+			gl.clear( 16384 );
+
+			for ( var i = 0; i < 2; i ++ ) {
+
+				var o = i * 3;
+
+				gl.activeTexture( this.depthOffset + o );
+				gl.bindTexture( 3553, this.depthTarget[ i ] );
+
+				gl.activeTexture( this.frontColorOffset + o );
+				gl.bindTexture( 3553, this.frontColorTarget[ i ] );
+
+				gl.activeTexture( this.backColorOffset + o );
+				gl.bindTexture( 3553, this.backColorTarget[ i ] );
+
+			}
+
+			gl.activeTexture( gl.TEXTURE6 );
+			gl.bindTexture( 3553, this.blendBackTarget );
+
+		};
 
 		this.initBuffers_ = function () {
 
@@ -24412,11 +24459,92 @@
 
 		};
 
-		this.postRenderInnerProcessBuffers = function () {
+		this.prepareDbBuffersForDraw_ = function ( gl, readId, writeId, dpPass ) {
+
+			this.clearBuffersForDraw_( gl, readId, writeId, dpPass === 0 );
+			this.bindBuffersForDraw_( gl, readId, writeId );
 
 		};
 
-		this.postDPLoopProcessBuffers = function () {
+		this.clearBuffersForDraw_ = function ( gl, readId, writeId, init ) {
+
+			var DEPTH_CLEAR_VALUE = - 99999.0;
+			var MAX_DEPTH_ = 1.0; // furthest
+			var MIN_DEPTH_ = 0.0; // nearest
+
+			gl.bindFramebuffer( 36009, this.depthPeelBuffers[ writeId ] );
+			gl.drawBuffers( [ 36064 ] );
+			gl.clearColor( DEPTH_CLEAR_VALUE, DEPTH_CLEAR_VALUE, 0, 0 );
+			gl.clear( 16384 );
+
+			gl.bindFramebuffer( 36009, this.colorBuffers[ writeId ] );
+			gl.drawBuffers( [ 36064, gl.COLOR_ATTACHMENT1 ] );
+			gl.clearColor( 0, 0, 0, 0 );
+			gl.clear( 16384 );
+
+			if ( init ) {
+
+				gl.bindFramebuffer( 36009, this.depthPeelBuffers[ readId ] );
+				gl.clearColor( - MIN_DEPTH_, MAX_DEPTH_, 0, 0 );
+				gl.clear( 16384 );
+
+				gl.bindFramebuffer( 36009, this.colorBuffers[ readId ] );
+				gl.clearColor( 0, 0, 0, 0 );
+				gl.clear( 16384 );
+
+			}
+
+		};
+
+		this.bindBuffersForDraw_ = function ( gl, readId, writeId ) {
+
+			var offsetRead = 3 * readId;
+
+			// Buffer bindings seem wrong, nothing is written to the backColorTexture
+
+			gl.bindFramebuffer( 36009, this.depthPeelBuffers[ writeId ] );
+			gl.drawBuffers( [ 36064, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2 ] );
+			gl.blendEquation( 32776 );
+
+			gl.uniform1i( this.uDepthBuffer, offsetRead );
+			gl.uniform1i( this.uColorBuffer, offsetRead + 1 );
+
+		};
+
+		this.blendBack_ = function ( gl, writeId ) {
+
+			var offsetBack = writeId * 3;
+			gl.bindFramebuffer( 36009, this.blendBackBuffer );
+			gl.drawBuffers( [ 36064 ] );
+			gl.blendEquation( 32774 );
+			gl.blendFuncSeparate( 770, 771, 1, 771 );
+
+			gl.useProgram( this.blendBackProgramData.program );
+			gl.uniform1i( this.blendBackProgramData.uBackColorBuffer, offsetBack + 2 );
+
+			this.drawQuads_( gl );
+
+		};
+
+		this.blendFinal_ = function ( gl, writeId ) {
+
+			var offsetBack = writeId * 3;
+			gl.bindFramebuffer( 36160, null );
+			gl.blendFunc( 1, 771 );
+
+			gl.useProgram( this.finalProgramData.program );
+			gl.uniform1i( this.finalProgramData.uColorBuffer, offsetBack + 1 );
+
+			this.drawQuads_( gl );
+
+		};
+
+		this.drawQuads_ = function ( gl ) {
+
+			gl.bindBuffer( 34962, this.quadBuffer );
+			gl.vertexAttribPointer( 0, 2, 5126, false, 0, 0 );
+
+			gl.drawArrays( 4, 0, 6 );
 
 		};
 
