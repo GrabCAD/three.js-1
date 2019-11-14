@@ -22689,8 +22689,8 @@
 		this.autoClearStencil = true;
 
 		// scene graph
-
-		this.sortObjects = true;
+		this.numDepthPeelingPasses = 4;
+		this.sortObjects = this.numDepthPeelingPasses !== 0;
 
 		// user-defined clipping
 
@@ -23680,6 +23680,26 @@
 
 		// Rendering
 
+		function renderInner( currentRenderList, scene, camera, forceClear ) {
+
+			background.render( currentRenderList, scene, camera, forceClear );
+
+			// render scene
+
+			var opaqueObjects = currentRenderList.opaque;
+			var transparentObjects = currentRenderList.transparent;
+			var overrideMaterial;
+
+			if ( scene.overrideMaterial ) overrideMaterial = scene.overrideMaterial;
+
+			// opaque pass (front-to-back order)
+			if ( opaqueObjects.length ) renderObjects( opaqueObjects, scene, camera, overrideMaterial );
+
+			// transparent pass (back-to-front order)
+			if ( transparentObjects.length ) renderObjects( transparentObjects, scene, camera, overrideMaterial );
+
+		}
+
 		this.render = function ( scene, camera ) {
 
 			var renderTarget, forceClear;
@@ -23777,29 +23797,17 @@
 
 			//
 
-			background.render( currentRenderList, scene, camera, forceClear );
+			if ( this.numDepthPeelingPasses > 1 ) {
 
-			// render scene
+				for ( var dpPass = 0; dpPass < this.numDepthPeelingPasses; dpPass ++ ) {
 
-			var opaqueObjects = currentRenderList.opaque;
-			var transparentObjects = currentRenderList.transparent;
+					renderInner( currentRenderList, scene, camera, forceClear );
 
-			if ( scene.overrideMaterial ) {
-
-				var overrideMaterial = scene.overrideMaterial;
-
-				if ( opaqueObjects.length ) renderObjects( opaqueObjects, scene, camera, overrideMaterial );
-				if ( transparentObjects.length ) renderObjects( transparentObjects, scene, camera, overrideMaterial );
+				}
 
 			} else {
 
-				// opaque pass (front-to-back order)
-
-				if ( opaqueObjects.length ) renderObjects( opaqueObjects, scene, camera );
-
-				// transparent pass (back-to-front order)
-
-				if ( transparentObjects.length ) renderObjects( transparentObjects, scene, camera );
+				renderInner( currentRenderList, scene, camera, forceClear );
 
 			}
 
