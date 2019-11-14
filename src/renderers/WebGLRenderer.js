@@ -1800,6 +1800,12 @@ function WebGLRenderer( parameters ) {
 
 	this.setupQuad_ = function ( gl ) {
 
+		// Quad for draw pass
+		var quadVertices = new Float32Array( [ - 1, 1, - 1, - 1, 1, - 1, - 1, 1, 1, - 1, 1, 1 ] );
+		this.quadBuffer = gl.createBuffer();
+		gl.bindBuffer( gl.ARRAY_BUFFER, this.quadBuffer );
+		gl.bufferData( gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW );
+
 	};
 
 	this.postRenderInnerProcessBuffers = function () {

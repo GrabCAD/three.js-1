@@ -24398,6 +24398,12 @@ function WebGLRenderer( parameters ) {
 
 	this.setupQuad_ = function ( gl ) {
 
+		// Quad for draw pass
+		var quadVertices = new Float32Array( [ - 1, 1, - 1, - 1, 1, - 1, - 1, 1, 1, - 1, 1, 1 ] );
+		this.quadBuffer = gl.createBuffer();
+		gl.bindBuffer( 34962, this.quadBuffer );
+		gl.bufferData( 34962, quadVertices, 35044 );
+
 	};
 
 	this.postRenderInnerProcessBuffers = function () {
