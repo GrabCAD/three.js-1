@@ -23680,26 +23680,6 @@
 
 		// Rendering
 
-		function renderInner( currentRenderList, scene, camera, forceClear ) {
-
-			background.render( currentRenderList, scene, camera, forceClear );
-
-			// render scene
-
-			var opaqueObjects = currentRenderList.opaque;
-			var transparentObjects = currentRenderList.transparent;
-			var overrideMaterial;
-
-			if ( scene.overrideMaterial ) overrideMaterial = scene.overrideMaterial;
-
-			// opaque pass (front-to-back order)
-			if ( opaqueObjects.length ) renderObjects( opaqueObjects, scene, camera, overrideMaterial );
-
-			// transparent pass (back-to-front order)
-			if ( transparentObjects.length ) renderObjects( transparentObjects, scene, camera, overrideMaterial );
-
-		}
-
 		this.render = function ( scene, camera ) {
 
 			var renderTarget, forceClear;
@@ -23799,15 +23779,20 @@
 
 			if ( this.numDepthPeelingPasses > 1 ) {
 
+				this.initBuffers_();
+
 				for ( var dpPass = 0; dpPass < this.numDepthPeelingPasses; dpPass ++ ) {
 
-					renderInner( currentRenderList, scene, camera, forceClear );
+					this.renderInner( currentRenderList, scene, camera, forceClear );
+					this.postRenderInnerProcessBuffers();
 
 				}
 
+				this.postDPLoopProcessBuffers();
+
 			} else {
 
-				renderInner( currentRenderList, scene, camera, forceClear );
+				this.renderInner( currentRenderList, scene, camera, forceClear );
 
 			}
 
@@ -23847,6 +23832,72 @@
 
 			currentRenderList = null;
 			currentRenderState = null;
+
+		};
+
+		this.renderInner = function ( currentRenderList, scene, camera, forceClear ) {
+
+			background.render( currentRenderList, scene, camera, forceClear );
+
+			// render scene
+
+			var opaqueObjects = currentRenderList.opaque;
+			var transparentObjects = currentRenderList.transparent;
+			var overrideMaterial;
+
+			if ( scene.overrideMaterial ) overrideMaterial = scene.overrideMaterial;
+
+			// opaque pass (front-to-back order)
+			if ( opaqueObjects.length ) renderObjects( opaqueObjects, scene, camera, overrideMaterial );
+
+			// transparent pass (back-to-front order)
+			if ( transparentObjects.length ) renderObjects( transparentObjects, scene, camera, overrideMaterial );
+
+		};
+
+		this.dpInitialized = false;
+
+		this.initBuffers_ = function () {
+
+			if ( this.dpInitialized ) return;
+
+			console.log( "*********************************" );
+			console.log( "*********************************" );
+			console.log( "*********************************" );
+			console.log( "this.initBuffers_" );
+			console.log( "Initializing" );
+			console.log( "*********************************" );
+			console.log( "*********************************" );
+			console.log( "*********************************" );
+
+			var gl = this.context;
+
+			gl.getExtension( "EXT_color_buffer_float" );
+
+			this.setupShaders_( gl );
+			this.initDpBuffers_( gl );
+			this.setupQuad_( gl );
+			this.dpInitialized = true;
+
+		};
+
+		this.setupShaders_ = function ( gl ) {
+
+		};
+
+		this.initDpBuffers_ = function ( gl ) {
+
+		};
+
+		this.setupQuad_ = function ( gl ) {
+
+		};
+
+		this.postRenderInnerProcessBuffers = function () {
+
+		};
+
+		this.postDPLoopProcessBuffers = function () {
 
 		};
 
