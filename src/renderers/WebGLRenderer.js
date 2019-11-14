@@ -1651,6 +1651,151 @@ function WebGLRenderer( parameters ) {
 
 	this.initDpBuffers_ = function ( gl ) {
 
+		this.depthPeelBuffers = [ gl.createFramebuffer(), gl.createFramebuffer() ];
+
+		// 2 for ping-pong
+		// COLOR_ATTACHMENT0 - front color
+		// COLOR_ATTACHMENT1 - back color
+		this.colorBuffers = [ gl.createFramebuffer(), gl.createFramebuffer() ];
+
+		this.blendBackBuffer = gl.createFramebuffer();
+
+		this.depthTarget = [ gl.createTexture(), gl.createTexture() ];
+		this.frontColorTarget = [ gl.createTexture(), gl.createTexture() ];
+		this.backColorTarget = [ gl.createTexture(), gl.createTexture() ];
+
+		this.blendBackTarget = gl.createTexture();
+
+		this.depthOffset = gl.TEXTURE0;
+		this.frontColorOffset = gl.TEXTURE1;
+		this.backColorOffset = gl.TEXTURE2;
+		for ( var i = 0; i < 2; i ++ ) {
+
+			var o = i * 3;
+
+			gl.bindFramebuffer( gl.FRAMEBUFFER, this.depthPeelBuffers[ i ] );
+
+			gl.activeTexture( this.depthOffset + o );
+			gl.bindTexture( gl.TEXTURE_2D, this.depthTarget[ i ] );
+			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
+			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
+			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
+			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
+			gl.texImage2D(
+				gl.TEXTURE_2D,
+				0,
+				gl.RG32F,
+				gl.drawingBufferWidth,
+				gl.drawingBufferHeight,
+				0,
+				gl.RG,
+				gl.FLOAT,
+				null
+			);
+			gl.framebufferTexture2D(
+				gl.FRAMEBUFFER,
+				gl.COLOR_ATTACHMENT0,
+				gl.TEXTURE_2D,
+				this.depthTarget[ i ],
+				0
+			);
+
+			gl.activeTexture( this.frontColorOffset + o );
+			gl.bindTexture( gl.TEXTURE_2D, this.frontColorTarget[ i ] );
+			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
+			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
+			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
+			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
+			gl.texImage2D(
+				gl.TEXTURE_2D,
+				0,
+				gl.RGBA16F,
+				gl.drawingBufferWidth,
+				gl.drawingBufferHeight,
+				0,
+				gl.RGBA,
+				gl.HALF_FLOAT,
+				null
+			);
+			gl.framebufferTexture2D(
+				gl.FRAMEBUFFER,
+				gl.COLOR_ATTACHMENT1,
+				gl.TEXTURE_2D,
+				this.frontColorTarget[ i ],
+				0
+			);
+
+			gl.activeTexture( this.backColorOffset + o );
+			gl.bindTexture( gl.TEXTURE_2D, this.backColorTarget[ i ] );
+			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
+			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
+			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
+			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
+			gl.texImage2D(
+				gl.TEXTURE_2D,
+				0,
+				gl.RGBA16F,
+				gl.drawingBufferWidth,
+				gl.drawingBufferHeight,
+				0,
+				gl.RGBA,
+				gl.HALF_FLOAT,
+				null
+			);
+			gl.framebufferTexture2D(
+				gl.FRAMEBUFFER,
+				gl.COLOR_ATTACHMENT2,
+				gl.TEXTURE_2D,
+				this.backColorTarget[ i ],
+				0
+			);
+
+			gl.bindFramebuffer( gl.FRAMEBUFFER, this.colorBuffers[ i ] );
+
+			gl.framebufferTexture2D(
+				gl.FRAMEBUFFER,
+				gl.COLOR_ATTACHMENT0,
+				gl.TEXTURE_2D,
+				this.frontColorTarget[ i ],
+				0
+			);
+			gl.framebufferTexture2D(
+				gl.FRAMEBUFFER,
+				gl.COLOR_ATTACHMENT1,
+				gl.TEXTURE_2D,
+				this.backColorTarget[ i ],
+				0
+			);
+
+		}
+
+		gl.bindFramebuffer( gl.FRAMEBUFFER, this.blendBackBuffer );
+		gl.activeTexture( gl.TEXTURE6 );
+		gl.bindTexture( gl.TEXTURE_2D, this.blendBackTarget );
+		gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
+		gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
+		gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
+		gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
+		gl.texImage2D(
+			gl.TEXTURE_2D,
+			0,
+			gl.RGBA16F,
+			gl.drawingBufferWidth,
+			gl.drawingBufferHeight,
+			0,
+			gl.RGBA,
+			gl.HALF_FLOAT,
+			null
+		);
+		gl.framebufferTexture2D(
+			gl.FRAMEBUFFER,
+			gl.COLOR_ATTACHMENT0,
+			gl.TEXTURE_2D,
+			this.blendBackTarget,
+			0
+		);
+		gl.bindFramebuffer( gl.FRAMEBUFFER, null );
+
 	};
 
 	this.setupQuad_ = function ( gl ) {
