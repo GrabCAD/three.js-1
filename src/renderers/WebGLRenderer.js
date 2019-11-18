@@ -1226,10 +1226,10 @@ function WebGLRenderer( parameters ) {
 
 			for ( var dpPass = 0; dpPass < this.numDepthPeelingPasses; dpPass ++ ) {
 
-//				readId = dpPass % 2;
-//				writeId = 1 - readId; // ping-pong: 0 or 1
+				readId = dpPass % 2;
+				writeId = 1 - readId; // ping-pong: 0 or 1
 
-//				this.prepareDbBuffersForDraw_( gl, readId, writeId, dpPass === 0 );
+//				this.clearBuffersForDraw_( gl, readId, writeId, dpPass === 0 );
 
 				this.renderInner( currentRenderList, scene, camera, forceClear );
 
@@ -1755,13 +1755,6 @@ function WebGLRenderer( parameters ) {
 		this.quadBuffer = gl.createBuffer();
 		gl.bindBuffer( gl.ARRAY_BUFFER, this.quadBuffer );
 		gl.bufferData( gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW );
-
-	};
-
-	this.prepareDbBuffersForDraw_ = function ( gl, readId, writeId, dpPass ) {
-
-		this.clearBuffersForDraw_( gl, readId, writeId, dpPass === 0 );
-		this.bindBuffersForDraw_( gl, readId, writeId );
 
 	};
 

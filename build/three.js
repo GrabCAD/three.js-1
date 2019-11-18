@@ -23818,10 +23818,7 @@
 
 				for ( var dpPass = 0; dpPass < this.numDepthPeelingPasses; dpPass ++ ) {
 
-	//				readId = dpPass % 2;
-	//				writeId = 1 - readId; // ping-pong: 0 or 1
-
-	//				this.prepareDbBuffersForDraw_( gl, readId, writeId, dpPass === 0 );
+	//				this.clearBuffersForDraw_( gl, readId, writeId, dpPass === 0 );
 
 					this.renderInner( currentRenderList, scene, camera, forceClear );
 
@@ -24320,13 +24317,6 @@
 			this.quadBuffer = gl.createBuffer();
 			gl.bindBuffer( 34962, this.quadBuffer );
 			gl.bufferData( 34962, quadVertices, 35044 );
-
-		};
-
-		this.prepareDbBuffersForDraw_ = function ( gl, readId, writeId, dpPass ) {
-
-			this.clearBuffersForDraw_( gl, readId, writeId, dpPass === 0 );
-			this.bindBuffersForDraw_( gl, readId, writeId );
 
 		};
 
