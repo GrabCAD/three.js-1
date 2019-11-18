@@ -16817,7 +16817,7 @@ WebGLUniforms.upload = function ( gl, seq, values, textures ) {
 		if ( v.needsUpdate !== false ) {
 
 			// note: always updating when .needsUpdate is undefined
-			if (v.value && v.type === 't')
+			if (v.value && v.value.hasOwnProperty('texture'))
 				u.setValue( gl, v.value.texture, textures );
 			else
 				u.setValue( gl, v.value, textures );
@@ -23808,7 +23808,7 @@ function WebGLRenderer( parameters ) {
 
 			// TODO glState.restore worked in the proto, but not now
 			// var glState = new GLRestoreState( gl ); 
-//			this.prepareDbBuffers_( camera );
+			this.prepareDbBuffers_( camera );
 
 			for ( var dpPass = 0; dpPass < this.numDepthPeelingPasses; dpPass ++ ) {
 
@@ -23917,10 +23917,6 @@ function WebGLRenderer( parameters ) {
 		gl.enable( 3042 );
 		gl.disable( 2929 );
 		gl.enable( 2884 );
-
-
-		this.initializeBuffersForPass_( gl );
-
 	};
 
 	this.initializeBuffersForPass_ = function ( gl ) {

@@ -1222,7 +1222,7 @@ function WebGLRenderer( parameters ) {
 
 			// TODO glState.restore worked in the proto, but not now
 			// var glState = new GLRestoreState( gl ); 
-//			this.prepareDbBuffers_( camera );
+			this.prepareDbBuffers_( camera );
 
 			for ( var dpPass = 0; dpPass < this.numDepthPeelingPasses; dpPass ++ ) {
 
@@ -1331,10 +1331,6 @@ function WebGLRenderer( parameters ) {
 		gl.enable( gl.BLEND );
 		gl.disable( gl.DEPTH_TEST );
 		gl.enable( gl.CULL_FACE );
-
-
-		this.initializeBuffersForPass_( gl );
-
 	};
 
 	this.initializeBuffersForPass_ = function ( gl ) {
