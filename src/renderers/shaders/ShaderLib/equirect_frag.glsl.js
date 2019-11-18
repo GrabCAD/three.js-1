@@ -17,7 +17,7 @@ void main() {
 
 	vec4 texColor = texture2D( tEquirect, sampleUV );
 
-	gl_FragColor = mapTexelToLinear( texColor );
+	three_FragColor = mapTexelToLinear( texColor );
 
 	#include <tonemapping_fragment>
 	#include <encodings_fragment>

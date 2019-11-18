@@ -33,11 +33,11 @@ void main() {
 
 	#if DEPTH_PACKING == 3200
 
-		gl_FragColor = vec4( vec3( 1.0 - gl_FragCoord.z ), opacity );
+		three_FragColor = vec4( vec3( 1.0 - gl_FragCoord.z ), opacity );
 
 	#elif DEPTH_PACKING == 3201
 
-		gl_FragColor = packDepthToRGBA( gl_FragCoord.z );
+		three_FragColor = packDepthToRGBA( gl_FragCoord.z );
 
 	#endif
 

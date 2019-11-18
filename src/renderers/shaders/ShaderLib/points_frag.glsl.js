@@ -23,7 +23,7 @@ void main() {
 
 	outgoingLight = diffuseColor.rgb;
 
-	gl_FragColor = vec4( outgoingLight, diffuseColor.a );
+	three_FragColor = vec4( outgoingLight, diffuseColor.a );
 
 	#include <premultiplied_alpha_fragment>
 	#include <tonemapping_fragment>

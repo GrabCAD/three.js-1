@@ -27,7 +27,7 @@ void main () {
 	dist = ( dist - nearDistance ) / ( farDistance - nearDistance );
 	dist = saturate( dist ); // clamp to [ 0, 1 ]
 
-	gl_FragColor = packDepthToRGBA( dist );
+	three_FragColor = packDepthToRGBA( dist );
 
 }
 `;

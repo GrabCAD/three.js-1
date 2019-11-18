@@ -315,8 +315,9 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 
 		prefixFragment = [
 
+			(renderer.numDepthPeelingPasses > 0) ? '#define DEPTH_PEELING 1' : '',
 			customExtensions,
-			customDefines
+			customDefines,
 
 		].filter( filterEmptyLine ).join( '\n' );
 
@@ -442,6 +443,7 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 
 		prefixFragment = [
 
+			(renderer.numDepthPeelingPasses > 0) ? '#define DEPTH_PEELING 1' : '',
 			customExtensions,
 
 			'precision ' + parameters.precision + ' float;',
@@ -579,6 +581,40 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 
 	var vertexGlsl = prefixVertex + vertexShader;
 	var fragmentGlsl = prefixFragment + fragmentShader;
+
+	fragmentGlsl = fragmentGlsl.substring(0 , fragmentGlsl.length - 1);
+	fragmentGlsl = fragmentGlsl + `
+	#ifdef DEPTH_PEELING
+		gl_FragColor = three_FragColor;
+	#else
+		gl_FragColor = three_FragColor;
+	#endif
+	}
+	`;
+
+	var testStr;
+	var tfcString = ' vec4 three_FragColor;';
+	if (fragmentGlsl.indexOf('#define gl_FragColor pc_fragColor') !== -1 && 
+		fragmentGlsl.indexOf('out highp vec4 pc_fragColor') !== -1) {
+		tfcString = ' highp' + tfcString;
+	}
+	testStr = 'void main() {';
+	if (fragmentGlsl.indexOf(testStr) !== -1) {
+		if (fragmentGlsl.indexOf(testStr + tfcString) === -1) {
+			fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString);
+		}
+	} else {
+		testStr = 'void main(){';
+		if (fragmentGlsl.indexOf(testStr) !== -1) {
+			if (fragmentGlsl.indexOf(testStr + tfcString) === -1) {
+				fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString);
+			}
+		}
+	}
+	if (fragmentGlsl.indexOf('vec4 three_FragColor') === -1) {
+		console.error('three_FragColor not declared in fragment shader');
+	}
+
 
 	// console.log( '*VERTEX*', vertexGlsl );
 	// console.log( '*FRAGMENT*', fragmentGlsl );

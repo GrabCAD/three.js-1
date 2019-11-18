@@ -1,7 +1,7 @@
 export default /* glsl */`
 #if defined( TONE_MAPPING )
 
-	gl_FragColor.rgb = toneMapping( gl_FragColor.rgb );
+	three_FragColor.rgb = toneMapping( three_FragColor.rgb );
 
 #endif
 `;

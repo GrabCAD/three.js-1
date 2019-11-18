@@ -1,7 +1,7 @@
 export default /* glsl */`
 #if defined( DITHERING )
 
-	gl_FragColor.rgb = dithering( gl_FragColor.rgb );
+	three_FragColor.rgb = dithering( three_FragColor.rgb );
 
 #endif
 `;

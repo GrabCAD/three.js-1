@@ -1,3 +1,3 @@
 export default /* glsl */`
-gl_FragColor = linearToOutputTexel( gl_FragColor );
+three_FragColor = linearToOutputTexel( three_FragColor );
 `;

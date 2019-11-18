@@ -11,7 +11,7 @@ export default /* glsl */`
 
 	#endif
 
-	gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
+	three_FragColor.rgb = mix( three_FragColor.rgb, fogColor, fogFactor );
 
 #endif
 `;

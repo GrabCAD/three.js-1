@@ -1332,10 +1332,6 @@ function WebGLRenderer( parameters ) {
 		gl.disable( gl.DEPTH_TEST );
 		gl.enable( gl.CULL_FACE );
 
-		gl.useProgram( this.depthPeelingProgram );
-		camera.updateProjectionMatrix();
-		camera.clearViewOffset();
-		gl.uniformMatrix4fv( this.projectionMatrix, false, camera.projectionMatrix.elements );
 
 		this.initializeBuffersForPass_( gl );
 
@@ -1471,128 +1467,6 @@ function WebGLRenderer( parameters ) {
 #endif
 			}`;
 
-		var srcFragmentShaderPeeling =
-			`#version 300 es
-			precision highp float;
-			precision highp sampler2D;
-			#define MAX_DEPTH 99999.0
-			uniform sampler2D uDepthBuffer;
-			uniform sampler2D uColorBuffer;
-			uniform vec4 color;
-			
-			in vec3 vNormal;
-									
-			layout(location=0) out vec2 depth;  // RG32F, R - negative front depth, G - back depth
-			layout(location=1) out vec4 outFrontColor;
-			layout(location=2) out vec4 outBackColor;
-
-			` +
-			gammaFuncs +
-			`
-
-			void main() {
-
-				float fragDepth = gl_FragCoord.z;   // 0 - 1
-		
-				ivec2 fragCoord = ivec2(gl_FragCoord.xy);
-				vec2 lastDepth = texelFetch(uDepthBuffer, fragCoord, 0).rg;
-				vec4 lastFrontColor = texelFetch(uColorBuffer, fragCoord, 0);
-
-				// write out next peel. -MAX_DEPTH is effectively a NO OP
-				depth.rg = vec2(-MAX_DEPTH);
-
-				outFrontColor = lastFrontColor;
-				outBackColor = vec4(0.0);
-
-				// The '-' on near makes a max blend behave like a negative blend
-				// both depths are converging toward each other                    
-				float nearestDepth = -lastDepth.x;
-				float furthestDepth = lastDepth.y;
-
-				if (fragDepth < nearestDepth || fragDepth > furthestDepth) {
-					// Skip this depth since it's been peeled.
-					return;
-				}
-
-				if (fragDepth > nearestDepth && fragDepth < furthestDepth) {
-					// This needs to be peeled.
-					// The ones remaining after MAX blended for 
-					// all need-to-peel will be peeled next pass.
-					depth.rg = vec2(-fragDepth, fragDepth);
-					return;
-				}
-
-				// -------------------------------------------------------------------
-				// If it reaches here, it is the layer we need to render for this pass
-				// -------------------------------------------------------------------
-
-				vec4 tColor = color;
-
-				vec4 resultColor;
-				
-				float ambient = 0.2;
-				float hilight = 0.3;
-				vec3 hilightColor = vec3(1,1,1);
-				vec3 lightVec = normalize(vec3(1,1,1));
-				float dp = abs(dot(vNormal, lightVec));
-				
-				resultColor.rgb = (ambient + (1.0 - ambient) * dp) * tColor.rgb;
-
-
-	#if 0
-				vec3 eyeVec = normalize(vec3(0.0, 0.0, 1.0));
-				vec3 specDir = 2.0 * vNormal * dot(vNormal, lightVec) - lightVec;
-				float dpSpec = clamp(dot(specDir, eyeVec), 0.0, 1.0);
-				float glint = pow(dpSpec, 8.0);
-	#else
-				float glint = dp * dp * dp * dp;
-	#endif
-				resultColor.rgb = hilight * glint * hilightColor + (1.0 - hilight) * resultColor.rgb;
-
-				resultColor.a = tColor.a;
-
-	#if 0
-	// phong highlights in progress, messes up gamma correction(?)
-				vec4 tColor = color;
-				vec4 resultColor;
-				
-				float ambient = 0.2;
-				float hilight = 0.3;
-				vec3 hilightColor = vec3(1,1,1);
-				float dp = abs(dot(vNormal, lightVec));
-				vec3 lightVec = normalize(vec3(1, 1, 1));
-
-				resultColor.rgb = (ambient + (1.0 - ambient) * dp) * tColor.rgb;
-
-				vec3 eyeVec = normalize(vec3(0.0, 0.0, 1.0));
-				vec3 specDir = 2.0 * vNormal * dot(vNormal, lightVec) - lightVec;
-				float dpSpec = clamp(dot(specDir, eyeVec), 0.0, 1.0);
-				float glint = pow(dpSpec, 8.0);
-				resultColor.rgb = hilight * glint * hilightColor + (1.0 - hilight) * resultColor.rgb;
-
-				resultColor.a = tColor.a;
-
-	#endif
-
-				// dual depth peeling
-				// write to back and front color buffer                            
-				if (fragDepth == nearestDepth) {
-					vec4 farColor = resultColor;
-					vec4 nearColor = outFrontColor;
-					float nearLinAlpha = lin(nearColor.a); 
-					float farLinAlpha = lin(farColor.a); 
-
-					float alphaMultiplier = 1.0 - nearLinAlpha;
-
-					outFrontColor.rgb = nonLin(lin(farColor.rgb) * farLinAlpha * alphaMultiplier +
-						lin(nearColor.rgb) * farLinAlpha);
-					outFrontColor.a = nonLin(farLinAlpha * farLinAlpha * alphaMultiplier + nearLinAlpha);
-				} else {
-					outBackColor = resultColor;
-				}
-			}
-		`;
-
 		var srcVertexShaderQuad = `#version 300 es
 			in vec4 inPosition;
 			void main() {
@@ -1679,17 +1553,6 @@ function WebGLRenderer( parameters ) {
 
 		}
 
-		var vertexShaderPeeling = createShader(
-			gl.VERTEX_SHADER,
-			srcVertexShaderPeeling,
-			"vertexShaderPeeling"
-		);
-		var fragmentShaderPeeling = createShader(
-			gl.FRAGMENT_SHADER,
-			srcFragmentShaderPeeling,
-			"fragmentShaderPeeling"
-		);
-
 		var fullScreenQuadVertexShader = createShader(
 			gl.VERTEX_SHADER,
 			srcVertexShaderQuad,
@@ -1706,20 +1569,9 @@ function WebGLRenderer( parameters ) {
 			"fragmentShaderBlendBack"
 		);
 
-		this.depthPeelingProgram = createProgram(
-			vertexShaderPeeling,
-			fragmentShaderPeeling,
-			"depthPeelingProgram"
-		);
-
 		// All uniforms follow a PRogramLocation_<uniform_name> pattern, so you can quickly search
-		this.uDepthBuffer = gl.getUniformLocation( this.depthPeelingProgram, "uDepthBuffer" );
-		this.uColorBuffer = gl.getUniformLocation( this.depthPeelingProgram, "uColorBuffer" );
-		this.color = gl.getUniformLocation( this.depthPeelingProgram, "color" );
-		this.normalMatrix = gl.getUniformLocation( this.depthPeelingProgram, "normalMatrix" );
-		//      this modelMatrix = gl.getUniformLocation(this.depthPeelingProgram, "modelMatrix") if decomposed with model matrix
-		this.modelViewMatrix = gl.getUniformLocation( this.depthPeelingProgram, "modelViewMatrix" );
-		this.projectionMatrix = gl.getUniformLocation( this.depthPeelingProgram, "projectionMatrix" );
+//		this.uDepthBuffer = gl.getUniformLocation( this.depthPeelingProgram, "uDepthBuffer" );
+//		this.uColorBuffer = gl.getUniformLocation( this.depthPeelingProgram, "uColorBuffer" );
 
 		this.blendBackProgramData = new ProgramData();
 		this.finalProgramData = new ProgramData();
