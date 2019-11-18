@@ -23772,26 +23772,25 @@
 			if ( this.numDepthPeelingPasses > 1 ) {
 
 				var gl = this.context;
-				var readId, writeId;
 
 				// TODO glState.restore worked in the proto, but not now
 				// var glState = new GLRestoreState( gl ); 
-				this.prepareDbBuffers_( camera );
+	//			this.prepareDbBuffers_( camera );
 
 				for ( var dpPass = 0; dpPass < this.numDepthPeelingPasses; dpPass ++ ) {
 
-					readId = dpPass % 2;
-					writeId = 1 - readId; // ping-pong: 0 or 1
+	//				readId = dpPass % 2;
+	//				writeId = 1 - readId; // ping-pong: 0 or 1
 
-					this.prepareDbBuffersForDraw_( gl, readId, writeId, dpPass === 0 );
+	//				this.prepareDbBuffersForDraw_( gl, readId, writeId, dpPass === 0 );
 
 					this.renderInner( currentRenderList, scene, camera, forceClear );
 
-					this.blendBack_( gl, writeId );
+	//				this.blendBack_( gl, writeId );
 
 				}
 
-				this.blendFinal_( gl, writeId );
+	//			this.blendFinal_( gl, writeId );
 				// glState.restore( gl );
 				// gl.depthMask( true );
 
