@@ -16817,7 +16817,10 @@ WebGLUniforms.upload = function ( gl, seq, values, textures ) {
 		if ( v.needsUpdate !== false ) {
 
 			// note: always updating when .needsUpdate is undefined
-			u.setValue( gl, v.value, textures );
+			if (v.value && v.type === 't')
+				u.setValue( gl, v.value.texture, textures );
+			else
+				u.setValue( gl, v.value, textures );
 
 		}
 
