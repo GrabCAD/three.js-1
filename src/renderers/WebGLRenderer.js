@@ -127,7 +127,7 @@ function WebGLRenderer( parameters ) {
 	this.autoClearStencil = true;
 
 	// scene graph
-	this.numDepthPeelingPasses = 4;
+	this.numDepthPeelingPasses = 0;
 	this.sortObjects = this.numDepthPeelingPasses !== 0;
 
 	// user-defined clipping

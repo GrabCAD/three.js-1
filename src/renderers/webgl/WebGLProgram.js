@@ -7,6 +7,8 @@ import { WebGLShader } from './WebGLShader.js';
 import { ShaderChunk } from '../shaders/ShaderChunk.js';
 import depthPeelingPrefixChunk from '../shaders/ShaderChunk/depth_peeling_prefix.glsl.js';
 import depthPeelingGammaFunctionsChunk from '../shaders/ShaderChunk/depth_peeling_gamma_functions.glsl.js';
+import depthPeelingMainPrefixChunk from '../shaders/ShaderChunk/depth_peeling_main_prefix.glsl.js';
+import depthPeelingMainSuffixChunk from '../shaders/ShaderChunk/depth_peeling_main_suffix.glsl.js';
 import { NoToneMapping, AddOperation, MixOperation, MultiplyOperation, EquirectangularRefractionMapping, CubeRefractionMapping, SphericalReflectionMapping, EquirectangularReflectionMapping, CubeUVRefractionMapping, CubeUVReflectionMapping, CubeReflectionMapping, PCFSoftShadowMap, PCFShadowMap, ACESFilmicToneMapping, CineonToneMapping, Uncharted2ToneMapping, ReinhardToneMapping, LinearToneMapping, GammaEncoding, RGBDEncoding, RGBM16Encoding, RGBM7Encoding, RGBEEncoding, sRGBEncoding, LinearEncoding } from '../../constants.js';
 
 var programIdCount = 0;
@@ -593,14 +595,7 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 	var fragmentGlsl = prefixFragment + fragmentShader;
 
 	fragmentGlsl = fragmentGlsl.substring(0 , fragmentGlsl.length - 1);
-	fragmentGlsl = fragmentGlsl + `
-	#ifdef DEPTH_PEELING
-		gl_FragColor = three_FragColor;
-	#else
-		gl_FragColor = three_FragColor;
-	#endif
-	}
-	`;
+	fragmentGlsl = fragmentGlsl + '\n' + depthPeelingMainSuffixChunk + '\n}';
 
 	var testStr;
 	var tfcString = ' vec4 three_FragColor;';
@@ -611,13 +606,13 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 	testStr = 'void main() {';
 	if (fragmentGlsl.indexOf(testStr) !== -1) {
 		if (fragmentGlsl.indexOf(testStr + tfcString) === -1) {
-			fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString);
+			fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString + '\n' + depthPeelingMainPrefixChunk);
 		}
 	} else {
 		testStr = 'void main(){';
 		if (fragmentGlsl.indexOf(testStr) !== -1) {
 			if (fragmentGlsl.indexOf(testStr + tfcString) === -1) {
-				fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString);
+				fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString + '\n' + depthPeelingMainPrefixChunk);
 			}
 		}
 	}

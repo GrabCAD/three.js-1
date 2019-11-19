@@ -16891,6 +16891,10 @@ var depthPeelingPrefixChunk = "#ifdef DEPTH_PEELING\n#define MAX_DEPTH 99999.0\n
 
 var depthPeelingGammaFunctionsChunk = "#ifdef DEPTH_PEELING\n#if 1\n\tfloat lin(float inVal)\n\t{\n\t\tfloat gamma = 2.2;\n\t\treturn pow(inVal, gamma);\n\t}\n\t\n\tvec3 lin(vec3 inVal)\n\t{\n\t\treturn vec3(lin(inVal.r), lin(inVal.g), lin(inVal.b));\n\t}\n\tfloat nonLin(float inVal)\n\t{\n\t\tfloat gammaInv = 1.0 / 2.2;\n\t\treturn pow(inVal, gammaInv);\n\t}\n\tvec3 nonLin(vec3 inVal)\n\t{\n\t\treturn vec3(\n\t\t\tnonLin(inVal.r), \n\t\t\tnonLin(inVal.g), \n\t\t\tnonLin(inVal.b)\n\t\t);\n\t}\n#else\n\tfloat lin(float inVal)\n\t{\n\t\treturn inVal;\n\t}\n\t\n\tvec3 lin(vec3 inVal)\n\t{\n\t\treturn inVal;\n\t}\n\tfloat nonLin(float inVal)\n\t{\n\t\treturn inVal;\n\t}\n\tvec3 nonLin(vec3 inVal)\n\t{\n\t\treturn inVal;\n\t}\n#endif\n#endif";
 
+var depthPeelingMainPrefixChunk = "#ifdef DEPTH_PEELING\nfloat fragDepth = gl_FragCoord.z;\nivec2 fragCoord = ivec2(gl_FragCoord.xy);\nvec2 lastDepth = texelFetch(uDepthBuffer, fragCoord, 0).rg;\nvec4 lastFrontColor = texelFetch(uColorBuffer, fragCoord, 0);\ndepth.rg = vec2(-MAX_DEPTH);\noutFrontColor = lastFrontColor;\noutBackColor = vec4(0.0);\nfloat nearestDepth = -lastDepth.x;\nfloat furthestDepth = lastDepth.y;\nif (fragDepth < nearestDepth || fragDepth > furthestDepth) {\n\treturn;\n}\nif (fragDepth > nearestDepth && fragDepth < furthestDepth) {\n\tdepth.rg = vec2(-fragDepth, fragDepth);\n\treturn;\n}\n#endif";
+
+var depthPeelingMainSuffixChunk = "#ifdef DEPTH_PEELING\nif (fragDepth == nearestDepth) {\n\tvec4 farColor = three_FragColor;\n\tvec4 nearColor = outFrontColor;\n\tfloat nearLinAlpha = lin(nearColor.a); \n\tfloat farLinAlpha = lin(farColor.a); \n\tfloat alphaMultiplier = 1.0 - nearLinAlpha;\n\toutFrontColor.rgb = nonLin(lin(farColor.rgb) * farLinAlpha * alphaMultiplier +\n\t\tlin(nearColor.rgb) * farLinAlpha);\n\toutFrontColor.a = nonLin(farLinAlpha * farLinAlpha * alphaMultiplier + nearLinAlpha);\n} else {\n\toutBackColor = three_FragColor;\n}\n#else\ngl_FragColor = three_FragColor;\t\n#endif";
+
 /**
  * @author mrdoob / http://mrdoob.com/
  */
@@ -17479,14 +17483,7 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 	var fragmentGlsl = prefixFragment + fragmentShader;
 
 	fragmentGlsl = fragmentGlsl.substring(0 , fragmentGlsl.length - 1);
-	fragmentGlsl = fragmentGlsl + `
-	#ifdef DEPTH_PEELING
-		gl_FragColor = three_FragColor;
-	#else
-		gl_FragColor = three_FragColor;
-	#endif
-	}
-	`;
+	fragmentGlsl = fragmentGlsl + '\n' + depthPeelingMainSuffixChunk + '\n}';
 
 	var testStr;
 	var tfcString = ' vec4 three_FragColor;';
@@ -17497,13 +17494,13 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 	testStr = 'void main() {';
 	if (fragmentGlsl.indexOf(testStr) !== -1) {
 		if (fragmentGlsl.indexOf(testStr + tfcString) === -1) {
-			fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString);
+			fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString + '\n' + depthPeelingMainPrefixChunk);
 		}
 	} else {
 		testStr = 'void main(){';
 		if (fragmentGlsl.indexOf(testStr) !== -1) {
 			if (fragmentGlsl.indexOf(testStr + tfcString) === -1) {
-				fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString);
+				fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString + '\n' + depthPeelingMainPrefixChunk);
 			}
 		}
 	}
@@ -22726,7 +22723,7 @@ function WebGLRenderer( parameters ) {
 	this.autoClearStencil = true;
 
 	// scene graph
-	this.numDepthPeelingPasses = 4;
+	this.numDepthPeelingPasses = 0;
 	this.sortObjects = this.numDepthPeelingPasses !== 0;
 
 	// user-defined clipping
