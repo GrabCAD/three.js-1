@@ -17182,6 +17182,22 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 	var program = gl.createProgram();
 
 	var prefixVertex, prefixFragment;
+	var depthPeelingEnabled = renderer.numDepthPeelingPasses > 0;
+	var depthPeelPrefixFragment = [
+		depthPeelingEnabled ? '#define DEPTH_PEELING 1' : '',
+		'#ifdef DEPTH_PEELING',
+		'#define MAX_DEPTH 99999.0',
+        'precision highp float;',
+        'precision highp sampler2D;',
+		'',
+		'uniform sampler2D uDepthBuffer;',
+		'uniform sampler2D uColorBuffer;',
+		'',
+		'layout(location=1) out vec2 depth;  // RG32F, R - negative front depth, G - back depth',
+		'layout(location=2) out vec4 outFrontColor;',
+		'layout(location=3) out vec4 outBackColor;',
+		'#endif',
+	].join('\n');
 
 	if ( material.isRawShaderMaterial ) {
 
@@ -17199,7 +17215,7 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 
 		prefixFragment = [
 
-			(renderer.numDepthPeelingPasses > 0) ? '#define DEPTH_PEELING 1' : '',
+			depthPeelPrefixFragment,
 			customExtensions,
 			customDefines,
 
@@ -17327,7 +17343,7 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 
 		prefixFragment = [
 
-			(renderer.numDepthPeelingPasses > 0) ? '#define DEPTH_PEELING 1' : '',
+			depthPeelPrefixFragment,
 			customExtensions,
 
 			'precision ' + parameters.precision + ' float;',
@@ -17444,10 +17460,11 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 			'#define texture2D texture'
 		].join( '\n' ) + '\n' + prefixVertex;
 
+		var layoutStr = depthPeelingEnabled ? 'layout(location=0) ' : '';
 		prefixFragment = [
 			'#version 300 es\n',
 			'#define varying in',
-			isGLSL3ShaderMaterial ? '' : 'out highp vec4 pc_fragColor;',
+			isGLSL3ShaderMaterial ? '' : layoutStr + 'out highp vec4 pc_fragColor;',
 			isGLSL3ShaderMaterial ? '' : '#define gl_FragColor pc_fragColor',
 			'#define gl_FragDepthEXT gl_FragDepth',
 			'#define texture2D texture',
