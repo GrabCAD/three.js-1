@@ -16887,6 +16887,10 @@ function WebGLShader( gl, type, string ) {
 
 }
 
+var depthPeelingPrefixChunk = "#ifdef DEPTH_PEELING\n#define MAX_DEPTH 99999.0\nprecision highp float;\nprecision highp sampler2D;\nuniform sampler2D uDepthBuffer;\nuniform sampler2D uColorBuffer;\nlayout(location=1) out vec2 depth;layout(location=2) out vec4 outFrontColor;\nlayout(location=3) out vec4 outBackColor;\n#endif";
+
+var depthPeelingGammaFunctionsChunk = "#ifdef DEPTH_PEELING\n#if 1\n\tfloat lin(float inVal)\n\t{\n\t\tfloat gamma = 2.2;\n\t\treturn pow(inVal, gamma);\n\t}\n\t\n\tvec3 lin(vec3 inVal)\n\t{\n\t\treturn vec3(lin(inVal.r), lin(inVal.g), lin(inVal.b));\n\t}\n\tfloat nonLin(float inVal)\n\t{\n\t\tfloat gammaInv = 1.0 / 2.2;\n\t\treturn pow(inVal, gammaInv);\n\t}\n\tvec3 nonLin(vec3 inVal)\n\t{\n\t\treturn vec3(\n\t\t\tnonLin(inVal.r), \n\t\t\tnonLin(inVal.g), \n\t\t\tnonLin(inVal.b)\n\t\t);\n\t}\n#else\n\tfloat lin(float inVal)\n\t{\n\t\treturn inVal;\n\t}\n\t\n\tvec3 lin(vec3 inVal)\n\t{\n\t\treturn inVal;\n\t}\n\tfloat nonLin(float inVal)\n\t{\n\t\treturn inVal;\n\t}\n\tvec3 nonLin(vec3 inVal)\n\t{\n\t\treturn inVal;\n\t}\n#endif\n#endif";
+
 /**
  * @author mrdoob / http://mrdoob.com/
  */
@@ -17183,20 +17187,11 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 
 	var prefixVertex, prefixFragment;
 	var depthPeelingEnabled = renderer.numDepthPeelingPasses > 0;
+
 	var depthPeelPrefixFragment = [
 		depthPeelingEnabled ? '#define DEPTH_PEELING 1' : '',
-		'#ifdef DEPTH_PEELING',
-		'#define MAX_DEPTH 99999.0',
-        'precision highp float;',
-        'precision highp sampler2D;',
-		'',
-		'uniform sampler2D uDepthBuffer;',
-		'uniform sampler2D uColorBuffer;',
-		'',
-		'layout(location=1) out vec2 depth;  // RG32F, R - negative front depth, G - back depth',
-		'layout(location=2) out vec4 outFrontColor;',
-		'layout(location=3) out vec4 outBackColor;',
-		'#endif',
+		depthPeelingPrefixChunk,
+		depthPeelingGammaFunctionsChunk,
 	].join('\n');
 
 	if ( material.isRawShaderMaterial ) {

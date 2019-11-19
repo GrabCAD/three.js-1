@@ -5,6 +5,8 @@
 import { WebGLUniforms } from './WebGLUniforms.js';
 import { WebGLShader } from './WebGLShader.js';
 import { ShaderChunk } from '../shaders/ShaderChunk.js';
+import depthPeelingPrefixChunk from '../shaders/ShaderChunk/depth_peeling_prefix.glsl.js';
+import depthPeelingGammaFunctionsChunk from '../shaders/ShaderChunk/depth_peeling_gamma_functions.glsl.js';
 import { NoToneMapping, AddOperation, MixOperation, MultiplyOperation, EquirectangularRefractionMapping, CubeRefractionMapping, SphericalReflectionMapping, EquirectangularReflectionMapping, CubeUVRefractionMapping, CubeUVReflectionMapping, CubeReflectionMapping, PCFSoftShadowMap, PCFShadowMap, ACESFilmicToneMapping, CineonToneMapping, Uncharted2ToneMapping, ReinhardToneMapping, LinearToneMapping, GammaEncoding, RGBDEncoding, RGBM16Encoding, RGBM7Encoding, RGBEEncoding, sRGBEncoding, LinearEncoding } from '../../constants.js';
 
 var programIdCount = 0;
@@ -299,20 +301,11 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 
 	var prefixVertex, prefixFragment;
 	var depthPeelingEnabled = renderer.numDepthPeelingPasses > 0;
+
 	var depthPeelPrefixFragment = [
 		depthPeelingEnabled ? '#define DEPTH_PEELING 1' : '',
-		'#ifdef DEPTH_PEELING',
-		'#define MAX_DEPTH 99999.0',
-        'precision highp float;',
-        'precision highp sampler2D;',
-		'',
-		'uniform sampler2D uDepthBuffer;',
-		'uniform sampler2D uColorBuffer;',
-		'',
-		'layout(location=1) out vec2 depth;  // RG32F, R - negative front depth, G - back depth',
-		'layout(location=2) out vec4 outFrontColor;',
-		'layout(location=3) out vec4 outBackColor;',
-		'#endif',
+		depthPeelingPrefixChunk,
+		depthPeelingGammaFunctionsChunk,
 	].join('\n');
 
 	if ( material.isRawShaderMaterial ) {
