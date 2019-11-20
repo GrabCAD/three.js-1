@@ -15,7 +15,7 @@ export default /* glsl */`
 	float lin(float inVal)
 	{
 		float gamma = 2.2;
-		return pow(inVal, gamma);
+		return pow(abs(inVal), gamma);
 	}
 	
 	vec3 lin(vec3 inVal)
@@ -26,7 +26,7 @@ export default /* glsl */`
 	float nonLin(float inVal)
 	{
 		float gammaInv = 1.0 / 2.2;
-		return pow(inVal, gammaInv);
+		return pow(abs(inVal), gammaInv);
 	}
 
 	vec3 nonLin(vec3 inVal)

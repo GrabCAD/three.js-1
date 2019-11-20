@@ -16895,7 +16895,7 @@
 
 	var depthPeelingPrefixChunk = "#ifdef DEPTH_PEELING\n#define MAX_DEPTH 99999.0\nprecision highp float;\nprecision highp sampler2D;\nuniform sampler2D uDepthBuffer;\nuniform sampler2D uColorBuffer;\nlayout(location=1) out vec2 depth;layout(location=2) out vec4 outFrontColor;\nlayout(location=3) out vec4 outBackColor;\n#endif";
 
-	var depthPeelingGammaFunctionsChunk = "#ifdef DEPTH_PEELING\n#if 1\n\tfloat lin(float inVal)\n\t{\n\t\tfloat gamma = 2.2;\n\t\treturn pow(inVal, gamma);\n\t}\n\t\n\tvec3 lin(vec3 inVal)\n\t{\n\t\treturn vec3(lin(inVal.r), lin(inVal.g), lin(inVal.b));\n\t}\n\tfloat nonLin(float inVal)\n\t{\n\t\tfloat gammaInv = 1.0 / 2.2;\n\t\treturn pow(inVal, gammaInv);\n\t}\n\tvec3 nonLin(vec3 inVal)\n\t{\n\t\treturn vec3(\n\t\t\tnonLin(inVal.r), \n\t\t\tnonLin(inVal.g), \n\t\t\tnonLin(inVal.b)\n\t\t);\n\t}\n#else\n\tfloat lin(float inVal)\n\t{\n\t\treturn inVal;\n\t}\n\t\n\tvec3 lin(vec3 inVal)\n\t{\n\t\treturn inVal;\n\t}\n\tfloat nonLin(float inVal)\n\t{\n\t\treturn inVal;\n\t}\n\tvec3 nonLin(vec3 inVal)\n\t{\n\t\treturn inVal;\n\t}\n#endif\n#endif";
+	var depthPeelingGammaFunctionsChunk = "#ifdef DEPTH_PEELING\n#if 1\n\tfloat lin(float inVal)\n\t{\n\t\tfloat gamma = 2.2;\n\t\treturn pow(abs(inVal), gamma);\n\t}\n\t\n\tvec3 lin(vec3 inVal)\n\t{\n\t\treturn vec3(lin(inVal.r), lin(inVal.g), lin(inVal.b));\n\t}\n\tfloat nonLin(float inVal)\n\t{\n\t\tfloat gammaInv = 1.0 / 2.2;\n\t\treturn pow(abs(inVal), gammaInv);\n\t}\n\tvec3 nonLin(vec3 inVal)\n\t{\n\t\treturn vec3(\n\t\t\tnonLin(inVal.r), \n\t\t\tnonLin(inVal.g), \n\t\t\tnonLin(inVal.b)\n\t\t);\n\t}\n#else\n\tfloat lin(float inVal)\n\t{\n\t\treturn inVal;\n\t}\n\t\n\tvec3 lin(vec3 inVal)\n\t{\n\t\treturn inVal;\n\t}\n\tfloat nonLin(float inVal)\n\t{\n\t\treturn inVal;\n\t}\n\tvec3 nonLin(vec3 inVal)\n\t{\n\t\treturn inVal;\n\t}\n#endif\n#endif";
 
 	var depthPeelingMainPrefixChunk = "#ifdef DEPTH_PEELING\nfloat fragDepth = gl_FragCoord.z;\nivec2 fragCoord = ivec2(gl_FragCoord.xy);\nvec2 lastDepth = texelFetch(uDepthBuffer, fragCoord, 0).rg;\nvec4 lastFrontColor = texelFetch(uColorBuffer, fragCoord, 0);\ndepth.rg = vec2(-MAX_DEPTH);\noutFrontColor = lastFrontColor;\noutBackColor = vec4(0.0);\nfloat nearestDepth = -lastDepth.x;\nfloat furthestDepth = lastDepth.y;\nif (fragDepth < nearestDepth || fragDepth > furthestDepth) {\n\treturn;\n}\nif (fragDepth > nearestDepth && fragDepth < furthestDepth) {\n\tdepth.rg = vec2(-fragDepth, fragDepth);\n\treturn;\n}\n#endif";
 
@@ -17196,7 +17196,7 @@
 		var program = gl.createProgram();
 
 		var prefixVertex, prefixFragment;
-		var depthPeelingEnabled = renderer.numDepthPeelingPasses > 0;
+		var depthPeelingEnabled = renderer.depthPeelingRender && renderer.numDepthPeelingPasses > 0;
 
 		var depthPeelPrefixFragment = [
 			depthPeelingEnabled ? '#define DEPTH_PEELING 1' : '',
@@ -22729,6 +22729,7 @@
 		this.autoClearStencil = true;
 
 		// scene graph
+		this.depthPeelingRender = true; // internal flag used to control type of render
 		this.numDepthPeelingPasses = 0;
 		this.sortObjects = this.numDepthPeelingPasses !== 0;
 
@@ -23275,6 +23276,8 @@
 
 		function renderObjectImmediate( object, program ) {
 
+			if ( _this.numDepthPeelingPasses > 0 )
+				bindBuffersForDraw_( program, _this.readId, _this.writeId );
 			object.render( function ( object ) {
 
 				_this.renderBufferImmediate( object, program );
@@ -23351,6 +23354,15 @@
 			state.setMaterial( material, frontFaceCW );
 
 			var program = setProgram( camera, fog, material, object );
+
+			if ( _this.depthPeelingRender && _this.numDepthPeelingPasses > 0 ) {
+				if ( program && program.program ) {
+
+					bindBuffersForDraw_(program.program, _this.readId, _this.writeId);
+
+				} else
+					console.warn('Unable to bind depth peeling buffers with current program');
+			}
 
 			var updateBuffers = false;
 
@@ -23720,14 +23732,24 @@
 
 		// Rendering
 
-		this.render = function ( scene, camera ) {
-
+		this.render = function ( scene, camera, depthPeelingRender ) {
+			// Not all renders should use depth peeline, such as composite overlays
+			// This flag sets this state for this call
 			var renderTarget, forceClear;
 
-			if ( arguments[ 2 ] !== undefined ) {
+			if ( arguments[ 2 ] !== undefined) {
 
-				console.warn( 'THREE.WebGLRenderer.render(): the renderTarget argument has been removed. Use .setRenderTarget() instead.' );
-				renderTarget = arguments[ 2 ];
+				if ( typeof( arguments[ 2 ] ) === 'WebGLRenderTarget') {
+
+					console.warn( 'THREE.WebGLRenderer.render(): the renderTarget argument has been removed. Use .setRenderTarget() instead.' );
+					renderTarget = arguments[ 2 ];
+					_this.depthPeelingRender = true;
+
+				} else {
+
+					_this.depthPeelingRender = arguments[ 2 ];
+
+				}
 
 			}
 
@@ -23817,25 +23839,30 @@
 
 			//
 
-			if ( this.numDepthPeelingPasses > 1 ) {
+			if ( depthPeelingRender && this.numDepthPeelingPasses > 1 ) {
 
 				var gl = this.context;
+				_this.readId = 1;
+				_this.writeId = 0;
 
 				// TODO glState.restore worked in the proto, but not now
-				// var glState = new GLRestoreState( gl ); 
+				// var glState = new GLRestoreState( gl );
 				this.prepareDbBuffers_( camera );
 
 				for ( var dpPass = 0; dpPass < this.numDepthPeelingPasses; dpPass ++ ) {
 
-	//				this.clearBuffersForDraw_( gl, readId, writeId, dpPass === 0 );
+					_this.readId = 1 - _this.readId; // ping-pong: 0 or 1
+					_this.writeId = 1 - _this.readId; // ping-pong: 0 or 1
+
+					this.clearBuffersForDraw_( gl, _this.readId, _this.writeId, dpPass === 0 );
 
 					this.renderInner( currentRenderList, scene, camera, forceClear );
 
-	//				this.blendBack_( gl, writeId );
+					this.blendBack_( gl, _this.writeId );
 
 				}
 
-	//			this.blendFinal_( gl, writeId );
+				this.blendFinal_( gl, _this.writeId );
 				// glState.restore( gl );
 				// gl.depthMask( true );
 
@@ -23923,8 +23950,8 @@
 			this.initBuffers_();
 
 			var gl = this.context;
-			gl.useProgram( this.finalProgramData.program );
-			gl.uniform1i( this.finalProgramData.uBackColorBuffer, 6 );
+			gl.useProgram( this.dpFinPrgData.program );
+			gl.uniform1i( this.dpFinPrgData.uBackColorBuffer, 6 );
 
 			gl.enable( 3042 );
 			gl.disable( 2929 );
@@ -24047,11 +24074,15 @@
 			
 			out vec4 fragColor;
 			void main() {
+			
 				// Blend back is using onboard blending, it has gamma correction
 				fragColor = texelFetch(uBackColorBuffer, ivec2(gl_FragCoord.xy), 0);
+/*
 				if (fragColor.a == 0.0) {
 					discard;
 				}
+*/			
+				fragColor = vec4(0,1,0,1);
 			}
 		`;
 
@@ -24076,6 +24107,7 @@
 				float alphaMultiplier = 1.0 - lin(frontColor.a);
 
 				vec3 color = nonLin(lin(frontColor.rgb) + alphaMultiplier * lin(backColor.rgb));
+
 
 				fragColor = vec4(
 					color,
@@ -24140,33 +24172,15 @@
 	//		this.uDepthBuffer = gl.getUniformLocation( this.depthPeelingProgram, "uDepthBuffer" );
 	//		this.uColorBuffer = gl.getUniformLocation( this.depthPeelingProgram, "uColorBuffer" );
 
-			this.blendBackProgramData = new ProgramData();
-			this.finalProgramData = new ProgramData();
+			this.dpBlBackPrgData = new ProgramData();
+			this.dpFinPrgData = new ProgramData();
 
-			this.blendBackProgramData.program = createProgram(
-				fullScreenQuadVertexShader,
-				blendBackFragmentShader,
-				"blendBackProgramData"
-			);
-			this.blendBackProgramData.uBackColorBuffer = gl.getUniformLocation(
-				this.blendBackProgramData.program,
-				"uBackColorBuffer"
-			);
+			this.dpBlBackPrgData.program = createProgram( fullScreenQuadVertexShader, blendBackFragmentShader, "dpBlBackPrgData" );
+			this.dpBlBackPrgData.uBackColorBuffer = gl.getUniformLocation( this.dpBlBackPrgData.program, "uBackColorBuffer" );
 
-			this.finalProgramData.program = createProgram(
-				fullScreenQuadVertexShader,
-				finalFragmentShader,
-				"finalProgramData"
-			);
-			this.finalProgramData.uColorBuffer = gl.getUniformLocation(
-				this.finalProgramData.program,
-				"uColorBuffer"
-			);
-
-			this.finalProgramData.uBackColorBuffer = gl.getUniformLocation(
-				this.finalProgramData.program,
-				"uBackColorBuffer"
-			);
+			this.dpFinPrgData.program = createProgram( fullScreenQuadVertexShader, finalFragmentShader, "dpFinPrgData" );
+			this.dpFinPrgData.uColorBuffer = gl.getUniformLocation( this.dpFinPrgData.program, "uColorBuffer" );
+			this.dpFinPrgData.uBackColorBuffer = gl.getUniformLocation( this.dpFinPrgData.program, "uBackColorBuffer" );
 
 		};
 
@@ -24359,21 +24373,24 @@
 
 		};
 
-		this.bindBuffersForDraw_ = function ( gl, readId, writeId ) {
+		function bindBuffersForDraw_( program, readId, writeId ) {
 
+			var gl = _this.context;
 			var offsetRead = 3 * readId;
 
 			// Buffer bindings seem wrong, nothing is written to the backColorTexture
 
-			gl.bindFramebuffer( 36009, this.depthPeelBuffers[ writeId ] );
+			gl.bindFramebuffer( 36009, _this.depthPeelBuffers[ writeId ] );
 			gl.drawBuffers( [ 36064, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2 ] );
 			gl.blendEquation( 32776 );
 
-			gl.uniform1i( this.uDepthBuffer, offsetRead );
-			gl.uniform1i( this.uColorBuffer, offsetRead + 1 );
+			var uDepthBuffer = gl.getUniformLocation(program, "uDepthBuffer");
+			var uColorBuffer = gl.getUniformLocation(program, "uColorBuffer");
 
-		};
+			gl.uniform1i( uDepthBuffer, offsetRead );
+			gl.uniform1i( uColorBuffer, offsetRead + 1 );
 
+		}
 		this.blendBack_ = function ( gl, writeId ) {
 
 			var offsetBack = writeId * 3;
@@ -24382,8 +24399,8 @@
 			gl.blendEquation( 32774 );
 			gl.blendFuncSeparate( 770, 771, 1, 771 );
 
-			gl.useProgram( this.blendBackProgramData.program );
-			gl.uniform1i( this.blendBackProgramData.uBackColorBuffer, offsetBack + 2 );
+			gl.useProgram( this.dpBlBackPrgData.program );
+			gl.uniform1i( this.dpBlBackPrgData.uBackColorBuffer, offsetBack + 2 );
 
 			this.drawQuads_( gl );
 
@@ -24395,8 +24412,8 @@
 			gl.bindFramebuffer( 36160, null );
 			gl.blendFunc( 1, 771 );
 
-			gl.useProgram( this.finalProgramData.program );
-			gl.uniform1i( this.finalProgramData.uColorBuffer, offsetBack + 1 );
+			gl.useProgram( this.dpFinPrgData.program );
+			gl.uniform1i( this.dpFinPrgData.uColorBuffer, offsetBack + 1 );
 
 			this.drawQuads_( gl );
 

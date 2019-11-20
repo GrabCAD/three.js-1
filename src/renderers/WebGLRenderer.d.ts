@@ -22,7 +22,7 @@ import { RenderTarget } from './webgl/WebGLRenderLists';
 export interface Renderer {
   domElement: HTMLCanvasElement;
 
-  render(scene: Scene, camera: Camera): void;
+  render(scene: Scene, camera: Camera, depthPeelingRender: boolean): void;
   setSize(width: number, height: number, updateStyle?: boolean): void;
 }
 
@@ -329,7 +329,8 @@ export class WebGLRenderer implements Renderer {
    */
   render(
     scene: Scene,
-    camera: Camera
+    camera: Camera,
+		depthPeelingRender: boolean
   ): void;
 
   /**

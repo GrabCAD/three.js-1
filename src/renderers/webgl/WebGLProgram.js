@@ -302,7 +302,7 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 	var program = gl.createProgram();
 
 	var prefixVertex, prefixFragment;
-	var depthPeelingEnabled = renderer.numDepthPeelingPasses > 0;
+	var depthPeelingEnabled = renderer.depthPeelingRender && renderer.numDepthPeelingPasses > 0;
 
 	var depthPeelPrefixFragment = [
 		depthPeelingEnabled ? '#define DEPTH_PEELING 1' : '',
