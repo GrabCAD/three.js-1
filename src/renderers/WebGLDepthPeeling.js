@@ -23,9 +23,11 @@ class WebGLDepthPeeling {
 
 		this.prepareDbBuffers_ = function ( camera ) {
 
-			this.initBuffers_();
-
 			var gl = this.renderer.context;
+
+			this.initBuffers_( gl );
+			this.resizeBuffers_( gl );
+
 			gl.useProgram( this.dpFinPrgData.program );
 			gl.uniform1i( this.dpFinPrgData.uBackColorBuffer, 6 );
 
@@ -60,11 +62,9 @@ class WebGLDepthPeeling {
 
 		};
 
-		this.initBuffers_ = function () {
+		this.initBuffers_ = function ( gl ) {
 
 			if ( this.dpInitialized ) return;
-
-			var gl = this.renderer.context;
 
 			gl.getExtension( "EXT_color_buffer_float" );
 
@@ -254,26 +254,46 @@ class WebGLDepthPeeling {
 
 		};
 
+		this.bufferSize = {
+			width: 0,
+			height: 0
+		};
+
 		this.initDpBuffers_ = function ( gl ) {
 
-			this.dpDepthBuffers = [ gl.createFramebuffer(), gl.createFramebuffer() ];
+			this.dpDepthBuffers = [gl.createFramebuffer(), gl.createFramebuffer()];
 
 			// 2 for ping-pong
 			// COLOR_ATTACHMENT0 - front color
 			// COLOR_ATTACHMENT1 - back color
-			this.colorBuffers = [ gl.createFramebuffer(), gl.createFramebuffer() ];
+			this.colorBuffers = [gl.createFramebuffer(), gl.createFramebuffer()];
 
 			this.blendBackBuffer = gl.createFramebuffer();
 
-			this.depthTarget = [ gl.createTexture(), gl.createTexture() ];
-			this.frontColorTarget = [ gl.createTexture(), gl.createTexture() ];
-			this.backColorTarget = [ gl.createTexture(), gl.createTexture() ];
+			this.depthTarget = [gl.createTexture(), gl.createTexture()];
+			this.frontColorTarget = [gl.createTexture(), gl.createTexture()];
+			this.backColorTarget = [gl.createTexture(), gl.createTexture()];
 
 			this.blendBackTarget = gl.createTexture();
 
 			this.depthOffset = gl.TEXTURE0;
 			this.frontColorOffset = this.depthOffset + 1;
 			this.backColorOffset = this.depthOffset + 2;
+
+		};
+
+		this.resizeBuffers_ = function ( gl ) {
+			if (this.bufferSize &&
+				gl.drawingBufferWidth === this.bufferSize.width &&
+				gl.drawingBufferHeight === this.bufferSize.height) {
+				return;
+			}
+
+			this.bufferSize = {
+				width: gl.drawingBufferWidth,
+				height: gl.drawingBufferHeight
+			};
+
 			for ( var i = 0; i < 2; i ++ ) {
 
 				var o = i * 3;
@@ -294,8 +314,8 @@ class WebGLDepthPeeling {
 					gl.TEXTURE_2D,
 					0,
 					RG32F,
-					gl.drawingBufferWidth,
-					gl.drawingBufferHeight,
+					this.bufferSize.width,
+					this.bufferSize.height,
 					0,
 					RG,
 					gl.FLOAT,
@@ -319,8 +339,8 @@ class WebGLDepthPeeling {
 					gl.TEXTURE_2D,
 					0,
 					gl.RGBA16F,
-					gl.drawingBufferWidth,
-					gl.drawingBufferHeight,
+					this.bufferSize.width,
+					this.bufferSize.height,
 					0,
 					gl.RGBA,
 					gl.HALF_FLOAT,
@@ -344,8 +364,8 @@ class WebGLDepthPeeling {
 					gl.TEXTURE_2D,
 					0,
 					gl.RGBA16F,
-					gl.drawingBufferWidth,
-					gl.drawingBufferHeight,
+					this.bufferSize.width,
+					this.bufferSize.height,
 					0,
 					gl.RGBA,
 					gl.HALF_FLOAT,
@@ -389,8 +409,8 @@ class WebGLDepthPeeling {
 				gl.TEXTURE_2D,
 				0,
 				gl.RGBA16F,
-				gl.drawingBufferWidth,
-				gl.drawingBufferHeight,
+				this.bufferSize.width,
+				this.bufferSize.height,
 				0,
 				gl.RGBA,
 				gl.HALF_FLOAT,
@@ -482,7 +502,11 @@ class WebGLDepthPeeling {
 			gl.drawBuffers( [ gl.COLOR_ATTACHMENT0 ] );
 			gl.blendEquation( gl.FUNC_ADD );
 			gl.blendFuncSeparate( gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA );
+/*
+			buffer testing
 			gl.clearColor(1, 0, 0, 0.5);
+			gl.clear(gl.COLOR_BUFFER_BIT);
+*/
 
 			gl.useProgram( this.dpBlBackPrgData.program );
 			gl.uniform1i( this.dpBlBackPrgData.uBackColorBuffer, offsetBack + 2 );
@@ -493,6 +517,7 @@ class WebGLDepthPeeling {
 
 		this.blendFinal_ = function ( gl, writeId ) {
 /*
+			 buffer testing
 			 gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.colorBuffers[writeId]);
 			 gl.clearColor(1, 0, 0, 0.5);
 			 gl.clear(gl.COLOR_BUFFER_BIT);

@@ -22723,9 +22723,11 @@
 
 			this.prepareDbBuffers_ = function ( camera ) {
 
-				this.initBuffers_();
-
 				var gl = this.renderer.context;
+
+				this.initBuffers_( gl );
+				this.resizeBuffers_( gl );
+
 				gl.useProgram( this.dpFinPrgData.program );
 				gl.uniform1i( this.dpFinPrgData.uBackColorBuffer, 6 );
 
@@ -22760,11 +22762,9 @@
 
 			};
 
-			this.initBuffers_ = function () {
+			this.initBuffers_ = function ( gl ) {
 
 				if ( this.dpInitialized ) return;
-
-				var gl = this.renderer.context;
 
 				gl.getExtension( "EXT_color_buffer_float" );
 
@@ -22954,26 +22954,46 @@
 
 			};
 
+			this.bufferSize = {
+				width: 0,
+				height: 0
+			};
+
 			this.initDpBuffers_ = function ( gl ) {
 
-				this.dpDepthBuffers = [ gl.createFramebuffer(), gl.createFramebuffer() ];
+				this.dpDepthBuffers = [gl.createFramebuffer(), gl.createFramebuffer()];
 
 				// 2 for ping-pong
 				// COLOR_ATTACHMENT0 - front color
 				// COLOR_ATTACHMENT1 - back color
-				this.colorBuffers = [ gl.createFramebuffer(), gl.createFramebuffer() ];
+				this.colorBuffers = [gl.createFramebuffer(), gl.createFramebuffer()];
 
 				this.blendBackBuffer = gl.createFramebuffer();
 
-				this.depthTarget = [ gl.createTexture(), gl.createTexture() ];
-				this.frontColorTarget = [ gl.createTexture(), gl.createTexture() ];
-				this.backColorTarget = [ gl.createTexture(), gl.createTexture() ];
+				this.depthTarget = [gl.createTexture(), gl.createTexture()];
+				this.frontColorTarget = [gl.createTexture(), gl.createTexture()];
+				this.backColorTarget = [gl.createTexture(), gl.createTexture()];
 
 				this.blendBackTarget = gl.createTexture();
 
 				this.depthOffset = 33984;
 				this.frontColorOffset = this.depthOffset + 1;
 				this.backColorOffset = this.depthOffset + 2;
+
+			};
+
+			this.resizeBuffers_ = function ( gl ) {
+				if (this.bufferSize &&
+					gl.drawingBufferWidth === this.bufferSize.width &&
+					gl.drawingBufferHeight === this.bufferSize.height) {
+					return;
+				}
+
+				this.bufferSize = {
+					width: gl.drawingBufferWidth,
+					height: gl.drawingBufferHeight
+				};
+
 				for ( var i = 0; i < 2; i ++ ) {
 
 					var o = i * 3;
@@ -22994,8 +23014,8 @@
 						3553,
 						0,
 						RG32F,
-						gl.drawingBufferWidth,
-						gl.drawingBufferHeight,
+						this.bufferSize.width,
+						this.bufferSize.height,
 						0,
 						RG,
 						5126,
@@ -23019,8 +23039,8 @@
 						3553,
 						0,
 						34842,
-						gl.drawingBufferWidth,
-						gl.drawingBufferHeight,
+						this.bufferSize.width,
+						this.bufferSize.height,
 						0,
 						6408,
 						5131,
@@ -23044,8 +23064,8 @@
 						3553,
 						0,
 						34842,
-						gl.drawingBufferWidth,
-						gl.drawingBufferHeight,
+						this.bufferSize.width,
+						this.bufferSize.height,
 						0,
 						6408,
 						5131,
@@ -23089,8 +23109,8 @@
 					3553,
 					0,
 					34842,
-					gl.drawingBufferWidth,
-					gl.drawingBufferHeight,
+					this.bufferSize.width,
+					this.bufferSize.height,
 					0,
 					6408,
 					5131,
@@ -23182,7 +23202,11 @@
 				gl.drawBuffers( [ 36064 ] );
 				gl.blendEquation( 32774 );
 				gl.blendFuncSeparate( 770, 771, 1, 771 );
+	/*
+				buffer testing
 				gl.clearColor(1, 0, 0, 0.5);
+				gl.clear(16384);
+	*/
 
 				gl.useProgram( this.dpBlBackPrgData.program );
 				gl.uniform1i( this.dpBlBackPrgData.uBackColorBuffer, offsetBack + 2 );
@@ -23193,6 +23217,7 @@
 
 			this.blendFinal_ = function ( gl, writeId ) {
 	/*
+				 buffer testing
 				 gl.bindFramebuffer(36009, this.colorBuffers[writeId]);
 				 gl.clearColor(1, 0, 0, 0.5);
 				 gl.clear(16384);
