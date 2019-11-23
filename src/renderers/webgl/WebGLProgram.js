@@ -304,11 +304,13 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 	var prefixVertex, prefixFragment;
 	var depthPeelingEnabled = renderer.depthPeelingRender && renderer.numDepthPeelingPasses > 0;
 
-	var depthPeelPrefixFragment = [
-		depthPeelingEnabled ? '#define DEPTH_PEELING 1' : '',
+	var depthPeelPrefixFragment = depthPeelingEnabled ? [
+		'#define DEPTH_PEELING 1',
 		depthPeelingPrefixChunk,
 		depthPeelingGammaFunctionsChunk,
-	].join('\n');
+	].join('\n') : '';
+
+	var dpPrecision = depthPeelingEnabled ? parameters.precision : 'highp';
 
 	if ( material.isRawShaderMaterial ) {
 
@@ -342,8 +344,8 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 
 		prefixVertex = [
 
-			'precision ' + parameters.precision + ' float;',
-			'precision ' + parameters.precision + ' int;',
+			'precision ' + dpPrecision + ' float;',
+			'precision ' + dpPrecision + ' int;',
 
 			'#define SHADER_NAME ' + shader.name,
 
@@ -454,11 +456,11 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 
 		prefixFragment = [
 
+			'precision ' + dpPrecision + ' float;',
+			'precision ' + dpPrecision + ' int;',
+
 			depthPeelPrefixFragment,
 			customExtensions,
-
-			'precision ' + parameters.precision + ' float;',
-			'precision ' + parameters.precision + ' int;',
 
 			'#define SHADER_NAME ' + shader.name,
 
@@ -571,12 +573,11 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 			'#define texture2D texture'
 		].join( '\n' ) + '\n' + prefixVertex;
 
-		var layoutStr = depthPeelingEnabled ? 'layout(location=0) ' : '';
 		prefixFragment = [
 			'#version 300 es\n',
 			'#define varying in',
-			isGLSL3ShaderMaterial ? '' : layoutStr + 'out highp vec4 pc_fragColor;',
-			isGLSL3ShaderMaterial ? '' : '#define gl_FragColor pc_fragColor',
+			(isGLSL3ShaderMaterial || depthPeelingEnabled) ? '' : 'out highp vec4 pc_fragColor;',
+			(isGLSL3ShaderMaterial || depthPeelingEnabled) ? '' : '#define gl_FragColor pc_fragColor',
 			'#define gl_FragDepthEXT gl_FragDepth',
 			'#define texture2D texture',
 			'#define textureCube texture',
@@ -594,25 +595,23 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 	var vertexGlsl = prefixVertex + vertexShader;
 	var fragmentGlsl = prefixFragment + fragmentShader;
 
-	fragmentGlsl = fragmentGlsl.substring(0 , fragmentGlsl.length - 1);
-	fragmentGlsl = fragmentGlsl + '\n' + depthPeelingMainSuffixChunk + '\n}';
+	var fragmentGlslPrefix = depthPeelingEnabled ?
+	'\n' + depthPeelingMainPrefixChunk :
+		'';
 
 	var testStr;
 	var tfcString = ' vec4 three_FragColor;';
-	if (fragmentGlsl.indexOf('#define gl_FragColor pc_fragColor') !== -1 && 
-		fragmentGlsl.indexOf('out highp vec4 pc_fragColor') !== -1) {
-		tfcString = ' highp' + tfcString;
-	}
+
 	testStr = 'void main() {';
 	if (fragmentGlsl.indexOf(testStr) !== -1) {
 		if (fragmentGlsl.indexOf(testStr + tfcString) === -1) {
-			fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString + '\n' + depthPeelingMainPrefixChunk);
+			fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString + fragmentGlslPrefix);
 		}
 	} else {
 		testStr = 'void main(){';
 		if (fragmentGlsl.indexOf(testStr) !== -1) {
 			if (fragmentGlsl.indexOf(testStr + tfcString) === -1) {
-				fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString + '\n' + depthPeelingMainPrefixChunk);
+				fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString + fragmentGlslPrefix);
 			}
 		}
 	}
@@ -620,9 +619,43 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 		console.error('three_FragColor not declared in fragment shader');
 	}
 
+	var fragmentGlslSuffix = depthPeelingEnabled ?
+		depthPeelingMainSuffixChunk :
+		'gl_FragColor = three_FragColor;';
+	fragmentGlsl = fragmentGlsl.substring(0 , fragmentGlsl.length - 1);
+	fragmentGlsl = fragmentGlsl + '\n' + fragmentGlslSuffix + '\n}';
+
+/*
+	if ( depthPeelingEnabled ) {
+		console.warn("***************************fragmentGlsl:\n" + fragmentGlsl + '\n***************************\n')
+	}
+*/
 
 	// console.log( '*VERTEX*', vertexGlsl );
 	// console.log( '*FRAGMENT*', fragmentGlsl );
+	var debugShader = false && depthPeelingEnabled;
+	if( debugShader ) {
+		fragmentGlsl =
+	 `#version 300 es
+		precision highp float;
+		precision highp sampler2D;
+            #define MAX_DEPTH 99999.0
+		uniform sampler2D uDepthBuffer;
+		uniform sampler2D uColorBuffer;
+		uniform vec4 color;
+
+		// RG32F, R - negative front depth, G - back depth
+		layout(location=0) out vec2 depth;
+		layout(location=1) out vec4 outFrontColor;
+		layout(location=2) out vec4 outBackColor;
+
+		void main() {
+			depth = vec2(0,0);
+			outFrontColor = vec4(1,0,0,1);
+			outBackColor = vec4(0,1,0,1);
+		}
+	`;
+	}
 
 	var glVertexShader = WebGLShader( gl, gl.VERTEX_SHADER, vertexGlsl );
 	var glFragmentShader = WebGLShader( gl, gl.FRAGMENT_SHADER, fragmentGlsl );
@@ -645,9 +678,10 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 
 	gl.linkProgram( program );
 
-	var programLog = gl.getProgramInfoLog( program ).trim();
-	var vertexLog = gl.getShaderInfoLog( glVertexShader ).trim();
-	var fragmentLog = gl.getShaderInfoLog( glFragmentShader ).trim();
+	// Double trim removes carriage returns where single trim results in a single space.
+	var programLog = gl.getProgramInfoLog( program ).trim().trim();
+	var vertexLog = gl.getShaderInfoLog( glVertexShader ).trim().trim();
+	var fragmentLog = gl.getShaderInfoLog( glFragmentShader ).trim().trim();
 
 	var runnable = true;
 	var haveDiagnostics = true;
@@ -661,7 +695,7 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 
 		console.error( 'THREE.WebGLProgram: shader error: ', gl.getError(), 'gl.VALIDATE_STATUS', gl.getProgramParameter( program, gl.VALIDATE_STATUS ), 'gl.getProgramInfoLog', programLog, vertexLog, fragmentLog );
 
-	} else if ( programLog !== '' ) {
+	} else if ( programLog. length > 1 ) {
 
 		console.warn( 'THREE.WebGLProgram: gl.getProgramInfoLog()', programLog );
 

@@ -43,6 +43,7 @@ import { WebGLUniforms } from './webgl/WebGLUniforms.js';
 import { WebGLUtils } from './webgl/WebGLUtils.js';
 import { WebVRManager } from './webvr/WebVRManager.js';
 import { WebXRManager } from './webvr/WebXRManager.js';
+import { WebGLDepthPeeling } from './WebGLDepthPeeling.js';
 
 /**
  * @author supereggbert / http://www.paulbrunt.co.uk/
@@ -52,17 +53,19 @@ import { WebXRManager } from './webvr/WebXRManager.js';
  * @author tschw
  */
 
+/*
+ // This block worked in the prototype but not when running under three.js
 class GLRestoreState {
 
 	constructor( gl ) {
 
-		this.blendEquation = gl.getParameter( gl.BLEND_EQUATION );
-		this.blendSrcRGB = gl.getParameter( gl.BLEND_SRC_RGB );
-		this.blendSrcAlpha = gl.getParameter( gl.BLEND_SRC_ALPHA );
-		this.blendDstRGB = gl.getParameter( gl.BLEND_DST_RGB );
-		this.blendDstAlpha = gl.getParameter( gl.BLEND_DST_ALPHA );
-		this.blendEnabled = gl.isEnabled( gl.BLEND );
-		this.depthFunc = gl.getParameter( gl.DEPTH_FUNC );
+		this.blendEquation = gl.getParameter( gl BLEND_EQUATION );
+		this.blendSrcRGB = gl.getParameter( gl BLEND_SRC_RGB );
+		this.blendSrcAlpha = gl.getParameter( gl BLEND_SRC_ALPHA );
+		this.blendDstRGB = gl.getParameter( gl BLEND_DST_RGB );
+		this.blendDstAlpha = gl.getParameter( gl BLEND_DST_ALPHA );
+		this.blendEnabled = gl.isEnabled( gl BLEND );
+		this.depthFunc = gl.getParameter( gl DEPTH_FUNC );
 
 
 		this.restore = function ( gl ) {
@@ -77,15 +80,14 @@ class GLRestoreState {
 				gl.disable( gl.BLEND );
 
 			}
-			/*
-			This block is breaking the render
+
 			gl.blendFuncSeparate(
 				this.blendSrcRGB,
 				this.blendSrcAlpha,
 				this.blendDstRGB,
 				this.blendDstAlpha
 			);
-			*/
+
 			gl.depthFunc( this.depthFunc );
 
 		};
@@ -93,6 +95,7 @@ class GLRestoreState {
 	}
 
 }
+*/
 
 function WebGLRenderer( parameters ) {
 
@@ -127,9 +130,8 @@ function WebGLRenderer( parameters ) {
 	this.autoClearStencil = true;
 
 	// scene graph
-	this.depthPeelingRender = true; // internal flag used to control type of render
-	this.numDepthPeelingPasses = 0;
-	this.sortObjects = this.numDepthPeelingPasses !== 0;
+	this.depthPeelingData = new WebGLDepthPeeling(this, 4);
+	this.sortObjects = this.depthPeelingData.getNumDepthPeelingPasses() === 0;
 
 	// user-defined clipping
 
@@ -609,6 +611,8 @@ function WebGLRenderer( parameters ) {
 
 		vr.dispose();
 
+		depthPeelingData.dispose();
+
 		animation.stop();
 
 	};
@@ -674,8 +678,7 @@ function WebGLRenderer( parameters ) {
 
 	function renderObjectImmediate( object, program ) {
 
-		if ( _this.numDepthPeelingPasses > 0 )
-			bindBuffersForDraw_( program, _this.readId, _this.writeId );
+		_this.depthPeelingData.bindBuffersForDraw_( program );
 		object.render( function ( object ) {
 
 			_this.renderBufferImmediate( object, program );
@@ -753,13 +756,10 @@ function WebGLRenderer( parameters ) {
 
 		var program = setProgram( camera, fog, material, object );
 
-		if ( _this.depthPeelingRender && _this.numDepthPeelingPasses > 0 ) {
-			if ( program && program.program ) {
+		if ( program && program.program ) {
 
-				bindBuffersForDraw_(program.program, _this.readId, _this.writeId);
+			_this.depthPeelingData.bindBuffersForDraw_( program.program );
 
-			} else
-				console.warn('Unable to bind depth peeling buffers with current program');
 		}
 
 		var updateBuffers = false;
@@ -1131,6 +1131,8 @@ function WebGLRenderer( parameters ) {
 	// Rendering
 
 	this.render = function ( scene, camera, depthPeelingRender ) {
+		var dpd = this.depthPeelingData;
+
 		// Not all renders should use depth peeline, such as composite overlays
 		// This flag sets this state for this call
 		var renderTarget, forceClear;
@@ -1141,11 +1143,11 @@ function WebGLRenderer( parameters ) {
 
 				console.warn( 'THREE.WebGLRenderer.render(): the renderTarget argument has been removed. Use .setRenderTarget() instead.' );
 				renderTarget = arguments[ 2 ];
-				_this.depthPeelingRender = true;
+				dpd.depthPeelingRender = true;
 
 			} else {
 
-				_this.depthPeelingRender = arguments[ 2 ];
+				dpd.depthPeelingRender = arguments[ 2 ];
 
 			}
 
@@ -1237,36 +1239,42 @@ function WebGLRenderer( parameters ) {
 
 		//
 
-		if ( depthPeelingRender && this.numDepthPeelingPasses > 1 ) {
+		if ( currentRenderList ) {
 
-			var gl = this.context;
-			_this.readId = 1;
-			_this.writeId = 0;
+			if ( dpd.isDepthPeelingOn() ) {
 
-			// TODO glState.restore worked in the proto, but not now
-			// var glState = new GLRestoreState( gl );
-			this.prepareDbBuffers_( camera );
+				var gl = this.context;
+				dpd.readId = 1;
+				dpd.writeId = 0;
 
-			for ( var dpPass = 0; dpPass < this.numDepthPeelingPasses; dpPass ++ ) {
+				// TODO glState.restore worked in the proto, but not now
+				// var glState = new GLRestoreState( gl );
+				dpd.prepareDbBuffers_( camera );
 
-				_this.readId = 1 - _this.readId; // ping-pong: 0 or 1
-				_this.writeId = 1 - _this.readId; // ping-pong: 0 or 1
+				var numPasses = dpd.getNumDepthPeelingPasses();
+				for ( var dpPass = 0; dpPass < numPasses; dpPass ++ ) {
 
-				this.clearBuffersForDraw_( gl, _this.readId, _this.writeId, dpPass === 0 );
+					dpd.readId = 1 - dpd.readId; // ping-pong: 0 or 1
+					dpd.writeId = 1 - dpd.readId; // ping-pong: 0 or 1
+
+					dpd.initializeBuffersForPass_( gl );
+					dpd.clearBuffersForDraw_( gl, dpd.readId, dpd.writeId, dpPass === 0 );
+
+					this.renderInner( currentRenderList, scene, camera, forceClear );
+
+					dpd.blendBack_( gl, dpd.writeId );
+
+				}
+
+				dpd.blendFinal_( gl, dpd.writeId );
+				// glState.restore( gl );
+				// gl.depthMask( true );
+
+			} else {
 
 				this.renderInner( currentRenderList, scene, camera, forceClear );
 
-				this.blendBack_( gl, _this.writeId );
-
 			}
-
-			this.blendFinal_( gl, _this.writeId );
-			// glState.restore( gl );
-			// gl.depthMask( true );
-
-		} else {
-
-			this.renderInner( currentRenderList, scene, camera, forceClear );
 
 		}
 
@@ -1326,531 +1334,6 @@ function WebGLRenderer( parameters ) {
 
 		// transparent pass (back-to-front order)
 		if ( transparentObjects.length ) renderObjects( transparentObjects, scene, camera, overrideMaterial );
-
-	};
-
-	this.dpInitialized = false;
-
-	class ProgramData {
-
-		constructor() {
-
-			this.program = null;
-			this.uColorBuffer = null;
-			this.uBackColorBuffer = null;
-
-		}
-
-	}
-
-	this.prepareDbBuffers_ = function ( camera ) {
-
-		this.initBuffers_();
-
-		var gl = this.context;
-		gl.useProgram( this.dpFinPrgData.program );
-		gl.uniform1i( this.dpFinPrgData.uBackColorBuffer, 6 );
-
-		gl.enable( gl.BLEND );
-		gl.disable( gl.DEPTH_TEST );
-		gl.enable( gl.CULL_FACE );
-	};
-
-	this.initializeBuffersForPass_ = function ( gl ) {
-
-		gl.bindFramebuffer( gl.DRAW_FRAMEBUFFER, this.blendBackBuffer );
-		gl.clearColor( 0, 0, 0, 0 );
-		gl.clear( gl.COLOR_BUFFER_BIT );
-
-		for ( var i = 0; i < 2; i ++ ) {
-
-			var o = i * 3;
-
-			gl.activeTexture( this.depthOffset + o );
-			gl.bindTexture( gl.TEXTURE_2D, this.depthTarget[ i ] );
-
-			gl.activeTexture( this.frontColorOffset + o );
-			gl.bindTexture( gl.TEXTURE_2D, this.frontColorTarget[ i ] );
-
-			gl.activeTexture( this.backColorOffset + o );
-			gl.bindTexture( gl.TEXTURE_2D, this.backColorTarget[ i ] );
-
-		}
-
-		gl.activeTexture( gl.TEXTURE6 );
-		gl.bindTexture( gl.TEXTURE_2D, this.blendBackTarget );
-
-	};
-
-	this.initBuffers_ = function () {
-
-		if ( this.dpInitialized ) return;
-
-		var gl = this.context;
-
-		gl.getExtension( "EXT_color_buffer_float" );
-
-		this.setupShaders_( gl );
-		this.initDpBuffers_( gl );
-		this.setupQuad_( gl );
-		this.dpInitialized = true;
-
-	};
-
-	this.setupShaders_ = function ( gl ) {
-
-		var gammaFuncs = `
-		// We are doing our own blending between different depth layers.
-		// For most graphics purposes, depth peeling can ignore this, for HQ color we should not.
-		//
-		// From literature, the video card does automatic gamma correction during blending, 
-		// but we're not using the card. So, we do our own gamma correction. See 
-		// https://blog.johnnovak.net/2016/09/21/what-every-coder-should-know-about-gamma/
-		
-		#if 1 // This definitely seems the correct approach, the other option is retained for future comparison if anyone
-				// else wants to test it.
-			// gamma corrected
-			float lin(float inVal)
-			{
-				float gamma = 2.2;
-				return pow(inVal, gamma);
-			}
-			
-			vec3 lin(vec3 inVal)
-			{
-				return vec3(lin(inVal.r), lin(inVal.g), lin(inVal.b));
-			}
-
-			float nonLin(float inVal)
-			{
-				float gammaInv = 1.0 / 2.2;
-				return pow(inVal, gammaInv);
-			}
-
-			vec3 nonLin(vec3 inVal)
-			{
-				return vec3(
-					nonLin(inVal.r), 
-					nonLin(inVal.g), 
-					nonLin(inVal.b)
-				);
-			}
-		#else
-			// Non gamma corrected, for comparison
-			float lin(float inVal)
-			{
-				return inVal;
-			}
-			
-			vec3 lin(vec3 inVal)
-			{
-				return inVal;
-			}
-
-			float nonLin(float inVal)
-			{
-				return inVal;
-			}
-
-			vec3 nonLin(vec3 inVal)
-			{
-				return inVal;
-			}
-		#endif
-		`;
-
-		var srcVertexShaderPeeling = `#version 300 es
-
-			precision highp float;
-			precision highp int;
-
-//                        uniform mat4 modelMatrix;
-//                        uniform mat4 viewMatrix;
-			uniform mat4 modelViewMatrix;
-			uniform mat4 projectionMatrix;
-			uniform mat3 normalMatrix;
-			uniform vec4 color;
-
-			layout(location=0) in vec4 position;
-			layout(location=1) in vec3 normal;
-
-			out vec3 vNormal;
-			void main() {
-				vec3 transformed = vec3( position );
-				vec4 mvPosition = modelViewMatrix * vec4( transformed, 1.0 );
-				gl_Position = projectionMatrix * mvPosition;
-				vNormal = normalize(normalMatrix * normal);
-#if 0
-				gl_Position.z = -gl_Position.z;
-				vNormal.z = -vNormal.z;
-#endif
-			}`;
-
-		var srcVertexShaderQuad = `#version 300 es
-			in vec4 inPosition;
-			void main() {
-				gl_Position = inPosition;
-			}
-		`;
-
-		var srcFragmentShaderBlendBack = `#version 300 es
-			precision highp float;
-			uniform sampler2D uBackColorBuffer;
-			
-			out vec4 fragColor;
-			void main() {
-			
-				// Blend back is using onboard blending, it has gamma correction
-				fragColor = texelFetch(uBackColorBuffer, ivec2(gl_FragCoord.xy), 0);
-/*
-				if (fragColor.a == 0.0) {
-					discard;
-				}
-*/			
-				fragColor = vec4(0,1,0,1);
-			}
-		`;
-
-		var srcFragmentShaderFinal =
-			`#version 300 es
-			precision highp float;
-			uniform sampler2D uColorBuffer;
-			uniform sampler2D uBackColorBuffer;
-
-			` +
-			gammaFuncs +
-			`
-			
-			out vec4 fragColor;
-			void main() {
-				// Blend final, needs gamma correction
-				// See more complete description in peeling fragment shader
-
-				ivec2 fragCoord = ivec2(gl_FragCoord.xy);
-				vec4 frontColor = texelFetch(uColorBuffer, fragCoord, 0);
-				vec4 backColor = texelFetch(uBackColorBuffer, fragCoord, 0);
-				float alphaMultiplier = 1.0 - lin(frontColor.a);
-
-				vec3 color = nonLin(lin(frontColor.rgb) + alphaMultiplier * lin(backColor.rgb));
-
-
-				fragColor = vec4(
-					color,
-					nonLin(lin(frontColor.a) + lin(backColor.a))
-				);
-			}
-		`;
-
-		function createShader( type, source, name ) {
-
-			var shader = gl.createShader( type );
-			gl.shaderSource( shader, source );
-			gl.compileShader( shader );
-			if ( ! gl.getShaderParameter( shader, gl.COMPILE_STATUS ) ) {
-
-				console.error( "Shader compile error in " + name );
-				console.error( gl.getShaderInfoLog( shader ) );
-				console.log( source );
-
-			}
-			return shader;
-
-		}
-
-		function createProgram(
-			vertShader,
-			fragShader,
-			name
-		) {
-
-			var program = gl.createProgram();
-			gl.attachShader( program, vertShader );
-			gl.attachShader( program, fragShader );
-			gl.linkProgram( program );
-			if ( ! gl.getProgramParameter( program, gl.LINK_STATUS ) ) {
-
-				console.error( "Shader compile error in " + name );
-				console.error( gl.getProgramInfoLog( program ) );
-
-			}
-			return program;
-
-		}
-
-		var fullScreenQuadVertexShader = createShader(
-			gl.VERTEX_SHADER,
-			srcVertexShaderQuad,
-			"vertexShaderQuad"
-		);
-		var finalFragmentShader = createShader(
-			gl.FRAGMENT_SHADER,
-			srcFragmentShaderFinal,
-			"fragmentShaderFinal"
-		);
-		var blendBackFragmentShader = createShader(
-			gl.FRAGMENT_SHADER,
-			srcFragmentShaderBlendBack,
-			"fragmentShaderBlendBack"
-		);
-
-		// All uniforms follow a PRogramLocation_<uniform_name> pattern, so you can quickly search
-//		this.uDepthBuffer = gl.getUniformLocation( this.depthPeelingProgram, "uDepthBuffer" );
-//		this.uColorBuffer = gl.getUniformLocation( this.depthPeelingProgram, "uColorBuffer" );
-
-		this.dpBlBackPrgData = new ProgramData();
-		this.dpFinPrgData = new ProgramData();
-
-		this.dpBlBackPrgData.program = createProgram( fullScreenQuadVertexShader, blendBackFragmentShader, "dpBlBackPrgData" );
-		this.dpBlBackPrgData.uBackColorBuffer = gl.getUniformLocation( this.dpBlBackPrgData.program, "uBackColorBuffer" );
-
-		this.dpFinPrgData.program = createProgram( fullScreenQuadVertexShader, finalFragmentShader, "dpFinPrgData" );
-		this.dpFinPrgData.uColorBuffer = gl.getUniformLocation( this.dpFinPrgData.program, "uColorBuffer" );
-		this.dpFinPrgData.uBackColorBuffer = gl.getUniformLocation( this.dpFinPrgData.program, "uBackColorBuffer" );
-
-	};
-
-	this.initDpBuffers_ = function ( gl ) {
-
-		this.depthPeelBuffers = [ gl.createFramebuffer(), gl.createFramebuffer() ];
-
-		// 2 for ping-pong
-		// COLOR_ATTACHMENT0 - front color
-		// COLOR_ATTACHMENT1 - back color
-		this.colorBuffers = [ gl.createFramebuffer(), gl.createFramebuffer() ];
-
-		this.blendBackBuffer = gl.createFramebuffer();
-
-		this.depthTarget = [ gl.createTexture(), gl.createTexture() ];
-		this.frontColorTarget = [ gl.createTexture(), gl.createTexture() ];
-		this.backColorTarget = [ gl.createTexture(), gl.createTexture() ];
-
-		this.blendBackTarget = gl.createTexture();
-
-		this.depthOffset = gl.TEXTURE0;
-		this.frontColorOffset = gl.TEXTURE1;
-		this.backColorOffset = gl.TEXTURE2;
-		for ( var i = 0; i < 2; i ++ ) {
-
-			var o = i * 3;
-
-			gl.bindFramebuffer( gl.FRAMEBUFFER, this.depthPeelBuffers[ i ] );
-
-			gl.activeTexture( this.depthOffset + o );
-			gl.bindTexture( gl.TEXTURE_2D, this.depthTarget[ i ] );
-			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
-			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
-			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
-			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
-			gl.texImage2D(
-				gl.TEXTURE_2D,
-				0,
-				gl.RG32F,
-				gl.drawingBufferWidth,
-				gl.drawingBufferHeight,
-				0,
-				gl.RG,
-				gl.FLOAT,
-				null
-			);
-			gl.framebufferTexture2D(
-				gl.FRAMEBUFFER,
-				gl.COLOR_ATTACHMENT0,
-				gl.TEXTURE_2D,
-				this.depthTarget[ i ],
-				0
-			);
-
-			gl.activeTexture( this.frontColorOffset + o );
-			gl.bindTexture( gl.TEXTURE_2D, this.frontColorTarget[ i ] );
-			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
-			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
-			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
-			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
-			gl.texImage2D(
-				gl.TEXTURE_2D,
-				0,
-				gl.RGBA16F,
-				gl.drawingBufferWidth,
-				gl.drawingBufferHeight,
-				0,
-				gl.RGBA,
-				gl.HALF_FLOAT,
-				null
-			);
-			gl.framebufferTexture2D(
-				gl.FRAMEBUFFER,
-				gl.COLOR_ATTACHMENT1,
-				gl.TEXTURE_2D,
-				this.frontColorTarget[ i ],
-				0
-			);
-
-			gl.activeTexture( this.backColorOffset + o );
-			gl.bindTexture( gl.TEXTURE_2D, this.backColorTarget[ i ] );
-			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
-			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
-			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
-			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
-			gl.texImage2D(
-				gl.TEXTURE_2D,
-				0,
-				gl.RGBA16F,
-				gl.drawingBufferWidth,
-				gl.drawingBufferHeight,
-				0,
-				gl.RGBA,
-				gl.HALF_FLOAT,
-				null
-			);
-			gl.framebufferTexture2D(
-				gl.FRAMEBUFFER,
-				gl.COLOR_ATTACHMENT2,
-				gl.TEXTURE_2D,
-				this.backColorTarget[ i ],
-				0
-			);
-
-			gl.bindFramebuffer( gl.FRAMEBUFFER, this.colorBuffers[ i ] );
-
-			gl.framebufferTexture2D(
-				gl.FRAMEBUFFER,
-				gl.COLOR_ATTACHMENT0,
-				gl.TEXTURE_2D,
-				this.frontColorTarget[ i ],
-				0
-			);
-			gl.framebufferTexture2D(
-				gl.FRAMEBUFFER,
-				gl.COLOR_ATTACHMENT1,
-				gl.TEXTURE_2D,
-				this.backColorTarget[ i ],
-				0
-			);
-
-		}
-
-		gl.bindFramebuffer( gl.FRAMEBUFFER, this.blendBackBuffer );
-		gl.activeTexture( gl.TEXTURE6 );
-		gl.bindTexture( gl.TEXTURE_2D, this.blendBackTarget );
-		gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
-		gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
-		gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
-		gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
-		gl.texImage2D(
-			gl.TEXTURE_2D,
-			0,
-			gl.RGBA16F,
-			gl.drawingBufferWidth,
-			gl.drawingBufferHeight,
-			0,
-			gl.RGBA,
-			gl.HALF_FLOAT,
-			null
-		);
-		gl.framebufferTexture2D(
-			gl.FRAMEBUFFER,
-			gl.COLOR_ATTACHMENT0,
-			gl.TEXTURE_2D,
-			this.blendBackTarget,
-			0
-		);
-		gl.bindFramebuffer( gl.FRAMEBUFFER, null );
-
-	};
-
-	this.setupQuad_ = function ( gl ) {
-
-		// Quad for draw pass
-		var quadVertices = new Float32Array( [ - 1, 1, - 1, - 1, 1, - 1, - 1, 1, 1, - 1, 1, 1 ] );
-		this.quadBuffer = gl.createBuffer();
-		gl.bindBuffer( gl.ARRAY_BUFFER, this.quadBuffer );
-		gl.bufferData( gl.ARRAY_BUFFER, quadVertices, gl.STATIC_DRAW );
-
-	};
-
-	this.clearBuffersForDraw_ = function ( gl, readId, writeId, init ) {
-
-		var DEPTH_CLEAR_VALUE = - 99999.0;
-		var MAX_DEPTH_ = 1.0; // furthest
-		var MIN_DEPTH_ = 0.0; // nearest
-
-		gl.bindFramebuffer( gl.DRAW_FRAMEBUFFER, this.depthPeelBuffers[ writeId ] );
-		gl.drawBuffers( [ gl.COLOR_ATTACHMENT0 ] );
-		gl.clearColor( DEPTH_CLEAR_VALUE, DEPTH_CLEAR_VALUE, 0, 0 );
-		gl.clear( gl.COLOR_BUFFER_BIT );
-
-		gl.bindFramebuffer( gl.DRAW_FRAMEBUFFER, this.colorBuffers[ writeId ] );
-		gl.drawBuffers( [ gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1 ] );
-		gl.clearColor( 0, 0, 0, 0 );
-		gl.clear( gl.COLOR_BUFFER_BIT );
-
-		if ( init ) {
-
-			gl.bindFramebuffer( gl.DRAW_FRAMEBUFFER, this.depthPeelBuffers[ readId ] );
-			gl.clearColor( - MIN_DEPTH_, MAX_DEPTH_, 0, 0 );
-			gl.clear( gl.COLOR_BUFFER_BIT );
-
-			gl.bindFramebuffer( gl.DRAW_FRAMEBUFFER, this.colorBuffers[ readId ] );
-			gl.clearColor( 0, 0, 0, 0 );
-			gl.clear( gl.COLOR_BUFFER_BIT );
-
-		}
-
-	};
-
-	function bindBuffersForDraw_( program, readId, writeId ) {
-
-		var gl = _this.context;
-		var offsetRead = 3 * readId;
-
-		// Buffer bindings seem wrong, nothing is written to the backColorTexture
-
-		gl.bindFramebuffer( gl.DRAW_FRAMEBUFFER, _this.depthPeelBuffers[ writeId ] );
-		gl.drawBuffers( [ gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2 ] );
-		gl.blendEquation( gl.MAX );
-
-		var uDepthBuffer = gl.getUniformLocation(program, "uDepthBuffer");
-		var uColorBuffer = gl.getUniformLocation(program, "uColorBuffer");
-
-		gl.uniform1i( uDepthBuffer, offsetRead );
-		gl.uniform1i( uColorBuffer, offsetRead + 1 );
-
-	};
-
-	this.blendBack_ = function ( gl, writeId ) {
-
-		var offsetBack = writeId * 3;
-		gl.bindFramebuffer( gl.DRAW_FRAMEBUFFER, this.blendBackBuffer );
-		gl.drawBuffers( [ gl.COLOR_ATTACHMENT0 ] );
-		gl.blendEquation( gl.FUNC_ADD );
-		gl.blendFuncSeparate( gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA );
-
-		gl.useProgram( this.dpBlBackPrgData.program );
-		gl.uniform1i( this.dpBlBackPrgData.uBackColorBuffer, offsetBack + 2 );
-
-		this.drawQuads_( gl );
-
-	};
-
-	this.blendFinal_ = function ( gl, writeId ) {
-
-		var offsetBack = writeId * 3;
-		gl.bindFramebuffer( gl.FRAMEBUFFER, null );
-		gl.blendFunc( gl.ONE, gl.ONE_MINUS_SRC_ALPHA );
-
-		gl.useProgram( this.dpFinPrgData.program );
-		gl.uniform1i( this.dpFinPrgData.uColorBuffer, offsetBack + 1 );
-
-		this.drawQuads_( gl );
-
-	};
-
-	this.drawQuads_ = function ( gl ) {
-
-		gl.bindBuffer( gl.ARRAY_BUFFER, this.quadBuffer );
-		gl.vertexAttribPointer( 0, 2, gl.FLOAT, false, 0, 0 );
-
-		gl.drawArrays( gl.TRIANGLES, 0, 6 );
 
 	};
 
