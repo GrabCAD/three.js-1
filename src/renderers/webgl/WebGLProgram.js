@@ -5,10 +5,6 @@
 import { WebGLUniforms } from './WebGLUniforms.js';
 import { WebGLShader } from './WebGLShader.js';
 import { ShaderChunk } from '../shaders/ShaderChunk.js';
-import depthPeelingPrefixChunk from '../shaders/ShaderChunk/depth_peeling_prefix.glsl.js';
-import depthPeelingGammaFunctionsChunk from '../shaders/ShaderChunk/depth_peeling_gamma_functions.glsl.js';
-import depthPeelingMainPrefixChunk from '../shaders/ShaderChunk/depth_peeling_main_prefix.glsl.js';
-import depthPeelingMainSuffixChunk from '../shaders/ShaderChunk/depth_peeling_main_suffix.glsl.js';
 import { NoToneMapping, AddOperation, MixOperation, MultiplyOperation, EquirectangularRefractionMapping, CubeRefractionMapping, SphericalReflectionMapping, EquirectangularReflectionMapping, CubeUVRefractionMapping, CubeUVReflectionMapping, CubeReflectionMapping, PCFSoftShadowMap, PCFShadowMap, ACESFilmicToneMapping, CineonToneMapping, Uncharted2ToneMapping, ReinhardToneMapping, LinearToneMapping, GammaEncoding, RGBDEncoding, RGBM16Encoding, RGBM7Encoding, RGBEEncoding, sRGBEncoding, LinearEncoding } from '../../constants.js';
 
 var programIdCount = 0;
@@ -302,14 +298,11 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 	var program = gl.createProgram();
 
 	var prefixVertex, prefixFragment;
-	var depthPeelingEnabled = renderer.depthPeelingRender && renderer.numDepthPeelingPasses > 0;
 
-	var depthPeelPrefixFragment = depthPeelingEnabled ? [
-		'#define DEPTH_PEELING 1',
-		depthPeelingPrefixChunk,
-		depthPeelingGammaFunctionsChunk,
-	].join('\n') : '';
-
+	// Perform shader modification for depth peeling
+	var dpd = renderer.getDepthPeelingData();
+	var depthPeelingEnabled = dpd.isDepthPeelingOn();
+	var depthPeelPrefixFragment = dpd.getPrefixFragment();
 	var dpPrecision = depthPeelingEnabled ? parameters.precision : 'highp';
 
 	if ( material.isRawShaderMaterial ) {
@@ -595,67 +588,7 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 	var vertexGlsl = prefixVertex + vertexShader;
 	var fragmentGlsl = prefixFragment + fragmentShader;
 
-	var fragmentGlslPrefix = depthPeelingEnabled ?
-	'\n' + depthPeelingMainPrefixChunk :
-		'';
-
-	var testStr;
-	var tfcString = ' vec4 three_FragColor;';
-
-	testStr = 'void main() {';
-	if (fragmentGlsl.indexOf(testStr) !== -1) {
-		if (fragmentGlsl.indexOf(testStr + tfcString) === -1) {
-			fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString + fragmentGlslPrefix);
-		}
-	} else {
-		testStr = 'void main(){';
-		if (fragmentGlsl.indexOf(testStr) !== -1) {
-			if (fragmentGlsl.indexOf(testStr + tfcString) === -1) {
-				fragmentGlsl = fragmentGlsl.replace(testStr, testStr + tfcString + fragmentGlslPrefix);
-			}
-		}
-	}
-	if (fragmentGlsl.indexOf('vec4 three_FragColor') === -1) {
-		console.error('three_FragColor not declared in fragment shader');
-	}
-
-	var fragmentGlslSuffix = depthPeelingEnabled ?
-		depthPeelingMainSuffixChunk :
-		'gl_FragColor = three_FragColor;';
-	fragmentGlsl = fragmentGlsl.substring(0 , fragmentGlsl.length - 1);
-	fragmentGlsl = fragmentGlsl + '\n' + fragmentGlslSuffix + '\n}';
-
-/*
-	if ( depthPeelingEnabled ) {
-		console.warn("***************************fragmentGlsl:\n" + fragmentGlsl + '\n***************************\n')
-	}
-*/
-
-	// console.log( '*VERTEX*', vertexGlsl );
-	// console.log( '*FRAGMENT*', fragmentGlsl );
-	var debugShader = false && depthPeelingEnabled;
-	if( debugShader ) {
-		fragmentGlsl =
-	 `#version 300 es
-		precision highp float;
-		precision highp sampler2D;
-            #define MAX_DEPTH 99999.0
-		uniform sampler2D uDepthBuffer;
-		uniform sampler2D uColorBuffer;
-		uniform vec4 color;
-
-		// RG32F, R - negative front depth, G - back depth
-		layout(location=0) out vec2 depth;
-		layout(location=1) out vec4 outFrontColor;
-		layout(location=2) out vec4 outBackColor;
-
-		void main() {
-			depth = vec2(0,0);
-			outFrontColor = vec4(1,0,0,1);
-			outBackColor = vec4(0,1,0,1);
-		}
-	`;
-	}
+	fragmentGlsl = dpd.modifyFragmentShader( fragmentGlsl );
 
 	var glVertexShader = WebGLShader( gl, gl.VERTEX_SHADER, vertexGlsl );
 	var glFragmentShader = WebGLShader( gl, gl.FRAGMENT_SHADER, fragmentGlsl );

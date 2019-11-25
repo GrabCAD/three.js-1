@@ -130,8 +130,12 @@ function WebGLRenderer( parameters ) {
 	this.autoClearStencil = true;
 
 	// scene graph
-	this.depthPeelingData = new WebGLDepthPeeling(this, 4);
+	this.depthPeelingData = new WebGLDepthPeeling(this, 6);
 	this.sortObjects = this.depthPeelingData.getNumDepthPeelingPasses() === 0;
+
+	this.getDepthPeelingData = function () {
+		return this.depthPeelingData;
+	}
 
 	// user-defined clipping
 
@@ -441,6 +445,9 @@ function WebGLRenderer( parameters ) {
 
 		this.setViewport( 0, 0, width, height );
 
+		if ( this.depthPeelingData ) {
+			this.depthPeelingData.resizeBuffers_(width, height);
+		}
 	};
 
 	this.getDrawingBufferSize = function ( target ) {
@@ -1257,7 +1264,6 @@ function WebGLRenderer( parameters ) {
 					dpd.readId = 1 - dpd.readId; // ping-pong: 0 or 1
 					dpd.writeId = 1 - dpd.readId; // ping-pong: 0 or 1
 
-					dpd.initializeBuffersForPass_( gl );
 					dpd.clearBuffersForDraw_( gl, dpd.readId, dpd.writeId, dpPass === 0 );
 
 					this.renderInner( currentRenderList, scene, camera, forceClear );

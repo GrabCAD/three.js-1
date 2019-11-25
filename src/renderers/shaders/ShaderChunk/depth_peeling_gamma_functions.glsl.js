@@ -8,7 +8,7 @@ export default /* glsl */`
 // but we're not using the card. So, we do our own gamma correction. See 
 // https://blog.johnnovak.net/2016/09/21/what-every-coder-should-know-about-gamma/
 
-#if 1
+#if 0
 // This definitely seems the correct approach, the other option is retained for future comparison if anyone
 // else wants to test it.
 // gamma corrected
@@ -39,25 +39,8 @@ export default /* glsl */`
 	}
 #else
 	// Non gamma corrected, for comparison
-	float lin(float inVal)
-	{
-		return inVal;
-	}
-	
-	vec3 lin(vec3 inVal)
-	{
-		return inVal;
-	}
-
-	float nonLin(float inVal)
-	{
-		return inVal;
-	}
-
-	vec3 nonLin(vec3 inVal)
-	{
-		return inVal;
-	}
+#define lin(inVal) inVal
+#define nonLin(inVal) inVal
 #endif
 
 #endif
