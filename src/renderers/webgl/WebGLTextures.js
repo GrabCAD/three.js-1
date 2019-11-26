@@ -267,9 +267,13 @@ function WebGLTextures( _gl, extensions, state, properties, capabilities, utils,
 
 	var textureUnits = 0;
 
-	function resetTextureUnits() {
+	function resetTextureUnits( renderer ) {
 
-		textureUnits = 0;
+		// If depth peeling is on, preallocate 3 textures for the depth peeling outputs
+		if ( renderer.depthPeelingData.isDepthPeelingOn())
+			textureUnits = 7; // 2 * (depth, front, back) + blend texture targets
+		else
+			textureUnits = 0;
 
 	}
 

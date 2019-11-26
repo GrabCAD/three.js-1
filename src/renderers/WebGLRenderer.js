@@ -685,7 +685,6 @@ function WebGLRenderer( parameters ) {
 
 	function renderObjectImmediate( object, program ) {
 
-		_this.depthPeelingData.bindBuffersForDraw_( program );
 		object.render( function ( object ) {
 
 			_this.renderBufferImmediate( object, program );
@@ -1257,6 +1256,7 @@ function WebGLRenderer( parameters ) {
 				// TODO glState.restore worked in the proto, but not now
 				// var glState = new GLRestoreState( gl );
 				dpd.prepareDbBuffers_( camera );
+				dpd.initializeBuffersForPass( gl );
 
 				var numPasses = dpd.getNumDepthPeelingPasses();
 				for ( var dpPass = 0; dpPass < numPasses; dpPass ++ ) {
@@ -1531,6 +1531,12 @@ function WebGLRenderer( parameters ) {
 
 			var program = setProgram( camera, scene.fog, material, object );
 
+			if ( program && program.program ) {
+
+				_this.depthPeelingData.bindBuffersForDraw_( program.program );
+
+			}
+
 			_currentGeometryProgram.geometry = null;
 			_currentGeometryProgram.program = null;
 			_currentGeometryProgram.wireframe = false;
@@ -1736,7 +1742,7 @@ function WebGLRenderer( parameters ) {
 
 	function setProgram( camera, fog, material, object ) {
 
-		textures.resetTextureUnits();
+		textures.resetTextureUnits( _this );
 
 		var materialProperties = properties.get( material );
 		var lights = currentRenderState.state.lights;

@@ -566,7 +566,7 @@ void main() {
 
 		};
 
-		this.initializeBuffersForPass_ = function ( gl ) {
+		this.initializeBuffersForPass = function ( gl ) {
 
 			for ( var i = 0; i < 2; i ++ ) {
 
@@ -593,7 +593,6 @@ void main() {
 			if (this.isDepthPeelingOn()) {
 				var gl = this.renderer.context;
 
-				this.initializeBuffersForPass_( gl );0
 				var offsetRead = 3 * this.readId;
 
 				// Buffer bindings seem wrong, nothing is written to the backColorTexture

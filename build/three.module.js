@@ -20468,9 +20468,13 @@ function WebGLTextures( _gl, extensions, state, properties, capabilities, utils,
 
 	var textureUnits = 0;
 
-	function resetTextureUnits() {
+	function resetTextureUnits( renderer ) {
 
-		textureUnits = 0;
+		// If depth peeling is on, preallocate 3 textures for the depth peeling outputs
+		if ( renderer.depthPeelingData.isDepthPeelingOn())
+			textureUnits = 7; // 2 * (depth, front, back) + blend texture targets
+		else
+			textureUnits = 0;
 
 	}
 
@@ -23113,7 +23117,7 @@ void main() {
 
 		};
 
-		this.initializeBuffersForPass_ = function ( gl ) {
+		this.initializeBuffersForPass = function ( gl ) {
 
 			for ( var i = 0; i < 2; i ++ ) {
 
@@ -23140,7 +23144,7 @@ void main() {
 			if (this.isDepthPeelingOn()) {
 				var gl = this.renderer.context;
 
-				this.initializeBuffersForPass_( gl );				var offsetRead = 3 * this.readId;
+				var offsetRead = 3 * this.readId;
 
 				// Buffer bindings seem wrong, nothing is written to the backColorTexture
 
@@ -23889,7 +23893,6 @@ function WebGLRenderer( parameters ) {
 
 	function renderObjectImmediate( object, program ) {
 
-		_this.depthPeelingData.bindBuffersForDraw_( program );
 		object.render( function ( object ) {
 
 			_this.renderBufferImmediate( object, program );
@@ -24461,6 +24464,7 @@ function WebGLRenderer( parameters ) {
 				// TODO glState.restore worked in the proto, but not now
 				// var glState = new GLRestoreState( gl );
 				dpd.prepareDbBuffers_( camera );
+				dpd.initializeBuffersForPass( gl );
 
 				var numPasses = dpd.getNumDepthPeelingPasses();
 				for ( var dpPass = 0; dpPass < numPasses; dpPass ++ ) {
@@ -24735,6 +24739,12 @@ function WebGLRenderer( parameters ) {
 
 			var program = setProgram( camera, scene.fog, material, object );
 
+			if ( program && program.program ) {
+
+				_this.depthPeelingData.bindBuffersForDraw_( program.program );
+
+			}
+
 			_currentGeometryProgram.geometry = null;
 			_currentGeometryProgram.program = null;
 			_currentGeometryProgram.wireframe = false;
@@ -24940,7 +24950,7 @@ function WebGLRenderer( parameters ) {
 
 	function setProgram( camera, fog, material, object ) {
 
-		textures.resetTextureUnits();
+		textures.resetTextureUnits( _this );
 
 		var materialProperties = properties.get( material );
 		var lights = currentRenderState.state.lights;
