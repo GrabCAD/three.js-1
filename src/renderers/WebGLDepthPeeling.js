@@ -18,6 +18,8 @@ class WebGLDepthPeeling {
 
 		}
 
+		var _this = this;
+
 		this.renderer = renderer;
 
 		this.initialized = false;
@@ -192,7 +194,7 @@ vec4 resultColor;
 			return fragmentGlsl;
 		};
 
-		this.prepareDbBuffers_ = function ( camera ) {
+		this.prepareDbBuffers = function ( camera ) {
 
 			var gl = this.renderer.context;
 
@@ -210,9 +212,8 @@ vec4 resultColor;
 
 			gl.getExtension( "EXT_color_buffer_float" );
 
+			this.createBuffers_( gl );
 			this.setupShaders_( gl );
-			this.initDpBuffers_( gl );
-			this.setupQuad_( gl );
 			this.initialized = true;
 
 		};
@@ -334,7 +335,7 @@ void main() {
 
 		};
 
-		this.initDpBuffers_ = function ( gl ) {
+		this.createBuffers_ = function ( gl ) {
 
 			this.depthBuffers = [gl.createFramebuffer(), gl.createFramebuffer()];
 
@@ -355,150 +356,50 @@ void main() {
 			this.frontColorOffset = this.depthOffset + 1;
 			this.backColorOffset = this.depthOffset + 2;
 
+			this.setupQuad_( gl );
 		};
 
-		this.resizeBuffers = function ( width, height ) {
-			if ( !this.initialized ) return;
+		function checkBufferSize_ ( width, height ) {
+			if ( !_this.initialized ) return false;
 
-			if (this.bufferSize &&
-				this.bufferSize.width === width &&
-				this.bufferSize.height === height) {
+			if (_this.bufferSize &&
+				_this.bufferSize.width === width &&
+				_this.bufferSize.height === height ) {
 				// already resized
-				return;
+				return true;
 			}
 
 			if (width === -1 && height === -1) {
-				if (this.bufferSize) {
-					width = this.bufferSize.width;
-					height = this.bufferSize.height;
+				if (_this.bufferSize) {
+					width = _this.bufferSize.width;
+					height = _this.bufferSize.height;
 				} else {
 					console.error('Width and height not set');
-					return;
+					return false;
 				}
-			} else {
-				var arbitraryMinBufferSize = 4;
-				if (!width || !height ||
-					(width < arbitraryMinBufferSize && height < arbitraryMinBufferSize)) {
-					// Test for an arbitrarily small buffer
-					console.warn('WebGLDepthPeeling.resizeBuffers_ called with bad sizes');
-					return;
-				}
-
-				this.bufferSize = {
-					width: width,
-					height: height
-				};
 			}
 
-			var gl = this.renderer.context;
-
-			for ( var i = 0; i < 2; i ++ ) {
-
-				var o = i * 3;
-
-				gl.bindFramebuffer( gl.FRAMEBUFFER, this.depthBuffers[ i ] );
-
-				// These constants cause warnings in npm run build
-				var RG32F = 0x8230;
-				var RG = 0x8227;
-
-				gl.activeTexture( this.depthOffset + o );
-				gl.bindTexture( gl.TEXTURE_2D, this.depthTarget[ i ] );
-				gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
-				gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
-				gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
-				gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
-				gl.texImage2D(
-					gl.TEXTURE_2D,
-					0,
-					RG32F,
-					width,
-					height,
-					0,
-					RG,
-					gl.FLOAT,
-					null
-				);
-				gl.framebufferTexture2D(
-					gl.FRAMEBUFFER,
-					gl.COLOR_ATTACHMENT0,
-					gl.TEXTURE_2D,
-					this.depthTarget[ i ],
-					0
-				);
-
-				gl.activeTexture( this.frontColorOffset + o );
-				gl.bindTexture( gl.TEXTURE_2D, this.frontColorTarget[ i ] );
-				gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
-				gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
-				gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
-				gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
-				gl.texImage2D(
-					gl.TEXTURE_2D,
-					0,
-					gl.RGBA16F,
-					width,
-					height,
-					0,
-					gl.RGBA,
-					gl.HALF_FLOAT,
-					null
-				);
-				gl.framebufferTexture2D(
-					gl.FRAMEBUFFER,
-					gl.COLOR_ATTACHMENT0 + 1,
-					gl.TEXTURE_2D,
-					this.frontColorTarget[ i ],
-					0
-				);
-
-				gl.activeTexture( this.backColorOffset + o );
-				gl.bindTexture( gl.TEXTURE_2D, this.backColorTarget[ i ] );
-				gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
-				gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
-				gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
-				gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE );
-				gl.texImage2D(
-					gl.TEXTURE_2D,
-					0,
-					gl.RGBA16F,
-					width,
-					height,
-					0,
-					gl.RGBA,
-					gl.HALF_FLOAT,
-					null
-				);
-				gl.framebufferTexture2D(
-					gl.FRAMEBUFFER,
-					gl.COLOR_ATTACHMENT0 + 2,
-					gl.TEXTURE_2D,
-					this.backColorTarget[ i ],
-					0
-				);
-
-				gl.bindFramebuffer( gl.FRAMEBUFFER, this.colorBuffers[ i ] );
-
-				gl.framebufferTexture2D(
-					gl.FRAMEBUFFER,
-					gl.COLOR_ATTACHMENT0,
-					gl.TEXTURE_2D,
-					this.frontColorTarget[ i ],
-					0
-				);
-				gl.framebufferTexture2D(
-					gl.FRAMEBUFFER,
-					gl.COLOR_ATTACHMENT0 + 1,
-					gl.TEXTURE_2D,
-					this.backColorTarget[ i ],
-					0
-				);
-
+			var arbitraryMinBufferSize = 4;
+			if (!width || !height ||
+				(width < arbitraryMinBufferSize && height < arbitraryMinBufferSize)) {
+				// Test for an arbitrarily small buffer
+				console.warn('WebGLDepthPeeling.resizeBuffers_ called with bad sizes');
+				return false;
 			}
 
-			gl.bindFramebuffer( gl.FRAMEBUFFER, this.blendBackBuffer );
-			gl.activeTexture( gl.TEXTURE0 + 6 );
-			gl.bindTexture( gl.TEXTURE_2D, this.blendBackTarget );
+			_this.bufferSize = {
+				width: width,
+				height: height
+			};
+
+			return true;
+
+		}
+
+		function resizeBuffer_ (gl, params ) {
+
+			gl.activeTexture( gl.TEXTURE0 + params.texOffset );
+			gl.bindTexture( gl.TEXTURE_2D, params.texture );
 			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
 			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
 			gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE );
@@ -506,22 +407,113 @@ void main() {
 			gl.texImage2D(
 				gl.TEXTURE_2D,
 				0,
-				gl.RGBA16F,
-				width,
-				height,
+				params.internalFormat,
+				_this.bufferSize.width,
+				_this.bufferSize.height,
 				0,
-				gl.RGBA,
-				gl.HALF_FLOAT,
+				params.format,
+				params.type,
 				null
 			);
 			gl.framebufferTexture2D(
 				gl.FRAMEBUFFER,
-				gl.COLOR_ATTACHMENT0,
+				params.attachment,
 				gl.TEXTURE_2D,
-				this.blendBackTarget,
+				params.texture,
 				0
 			);
-			gl.bindFramebuffer( gl.FRAMEBUFFER, null );
+
+		}
+
+		function resizeDepthBuffer_ (gl, texOffset, attachOffset, texture) {
+			// These constants cause warnings in npm run build
+			var RG32F = 0x8230;
+			var RG = 0x8227;
+			resizeBuffer_( gl, {
+				texOffset: texOffset,
+				texture: texture,
+				attachment: gl.COLOR_ATTACHMENT0,
+				internalFormat: gl.RG32F,
+				format: gl.RG,
+				type: gl.FLOAT,
+			});
+
+		}
+
+		function resizeColorBuffer_ (gl, texOffset, attachOffset, texture) {
+			resizeBuffer_( gl, {
+				texOffset: texOffset,
+				texture: texture,
+				attachment: gl.COLOR_ATTACHMENT0 + attachOffset,
+				internalFormat: gl.RGBA16F,
+				format: gl.RGBA,
+				type: gl.HALF_FLOAT,
+			});
+
+		}
+
+		function bindColorBuffers_(gl, pingPongIndex ) {
+
+			gl.bindFramebuffer( gl.FRAMEBUFFER, _this.colorBuffers[ pingPongIndex ] );
+
+			gl.framebufferTexture2D(
+				gl.FRAMEBUFFER,
+				gl.COLOR_ATTACHMENT0,
+				gl.TEXTURE_2D,
+				_this.frontColorTarget[ pingPongIndex ],
+				0
+			);
+			gl.framebufferTexture2D(
+				gl.FRAMEBUFFER,
+				gl.COLOR_ATTACHMENT0 + 1,
+				gl.TEXTURE_2D,
+				_this.backColorTarget[ pingPongIndex ],
+				0
+			);
+
+		}
+
+		function resizeDepthBuffers_ (gl, pingPongIndex) {
+
+			var texOffset = pingPongIndex * 3;
+
+			gl.bindFramebuffer( gl.FRAMEBUFFER, _this.depthBuffers[ pingPongIndex ] );
+			resizeDepthBuffer_( gl, texOffset, 0, _this.depthTarget[ pingPongIndex ] );
+			resizeColorBuffer_( gl, texOffset, 1, _this.frontColorTarget[ pingPongIndex ] );
+			resizeColorBuffer_( gl, texOffset, 2, _this.backColorTarget[ pingPongIndex ] );
+		}
+
+		function resizeBackBuffer_ (gl) {
+
+			gl.bindFramebuffer( gl.FRAMEBUFFER, _this.blendBackBuffer );
+			resizeBuffer_( gl, {
+				texOffset: 6,
+				texture: _this.blendBackTarget,
+				attachment: gl.COLOR_ATTACHMENT0 + 6,
+				internalFormat: gl.RGBA16F,
+				format: gl.RGBA,
+				type: gl.HALF_FLOAT,
+			});
+
+		}
+
+		this.resizeBuffers = function ( width, height ) {
+
+			if ( checkBufferSize_(width, height) ) {
+
+				var gl = this.renderer.context;
+
+				for ( var i = 0; i < 2; i ++ ) {
+
+					resizeDepthBuffers_( gl, i );
+					bindColorBuffers_( gl, i );
+
+				}
+
+				resizeBackBuffer_( gl );
+				gl.bindFramebuffer( gl.FRAMEBUFFER, null );
+
+			}
 
 		};
 
@@ -615,8 +607,6 @@ void main() {
 */
 				var offsetRead = 3 * this.readId;
 
-				console.log('\n\nBinding for pass number:' + this.passNum);
-				console.log('Writing to writeId:' + this.writeId + ' with COLOR_ATTACHMENT 0,1,2');
 				gl.bindFramebuffer( gl.DRAW_FRAMEBUFFER, this.depthBuffers[ this.writeId ] );
 				gl.drawBuffers( [ gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT0 + 1, gl.COLOR_ATTACHMENT0 + 2 ] );
 				gl.blendEquation( gl.MAX );
@@ -624,7 +614,6 @@ void main() {
 				var uDepthBuffer = gl.getUniformLocation(program, "uDepthBuffer");
 				var uColorBuffer = gl.getUniformLocation(program, "uColorBuffer");
 
-				console.log('Reading from depth:' + offsetRead + ' and color:' + (offsetRead + 1));
 				gl.uniform1i( uDepthBuffer, offsetRead );
 				gl.uniform1i( uColorBuffer, offsetRead + 1 );
 			}

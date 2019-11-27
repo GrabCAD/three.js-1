@@ -1253,8 +1253,7 @@ function WebGLRenderer( parameters ) {
 
 				// TODO glState.restore worked in the proto, but not now
 				// var glState = new GLRestoreState( gl );
-				dpd.prepareDbBuffers_( camera );
-				dpd.resizeBuffers( -1, -1 ); // force all the buffers to be rebound
+				dpd.prepareDbBuffers( camera );
 				dpd.initializeBuffersForPass( gl );
 
 				var numPasses = dpd.getNumDepthPeelingPasses();
@@ -1263,9 +1262,9 @@ function WebGLRenderer( parameters ) {
 					dpd.beginPass( dpPass );
 					dpd.clearBuffersForDraw( gl, dpPass === 0 );
 
-					dpd.dumpDepthTexture('Depth input : ', dpd.depthTarget[dpd.readId]);
+					//dpd.dumpDepthTexture('Depth input : ', dpd.depthTarget[dpd.readId]);
 					this.renderInner( currentRenderList, scene, camera, forceClear );
-					dpd.dumpDepthTexture('Depth output: ', dpd.depthTarget[dpd.writeId]);
+					//dpd.dumpDepthTexture('Depth output: ', dpd.depthTarget[dpd.writeId]);
 
 					dpd.blendBack( gl );
 
