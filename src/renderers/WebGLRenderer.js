@@ -446,7 +446,7 @@ function WebGLRenderer( parameters ) {
 		this.setViewport( 0, 0, width, height );
 
 		if ( this.depthPeelingData ) {
-			this.depthPeelingData.resizeBuffers_(width, height);
+			this.depthPeelingData.resizeBuffers(width, height);
 		}
 	};
 
@@ -1250,25 +1250,24 @@ function WebGLRenderer( parameters ) {
 			if ( dpd.isDepthPeelingOn() ) {
 
 				var gl = this.context;
-				dpd.readId = 1;
-				dpd.writeId = 0;
 
 				// TODO glState.restore worked in the proto, but not now
 				// var glState = new GLRestoreState( gl );
 				dpd.prepareDbBuffers_( camera );
+				dpd.resizeBuffers( -1, -1 ); // force all the buffers to be rebound
 				dpd.initializeBuffersForPass( gl );
 
 				var numPasses = dpd.getNumDepthPeelingPasses();
 				for ( var dpPass = 0; dpPass < numPasses; dpPass ++ ) {
 
-					dpd.readId = 1 - dpd.readId; // ping-pong: 0 or 1
-					dpd.writeId = 1 - dpd.readId; // ping-pong: 0 or 1
+					dpd.beginPass( dpPass );
+					dpd.clearBuffersForDraw( gl, dpPass === 0 );
 
-					dpd.clearBuffersForDraw_( gl, dpd.readId, dpd.writeId, dpPass === 0 );
-
+					dpd.dumpDepthTexture('Depth input : ', dpd.depthTarget[dpd.readId]);
 					this.renderInner( currentRenderList, scene, camera, forceClear );
+					dpd.dumpDepthTexture('Depth output: ', dpd.depthTarget[dpd.writeId]);
 
-					dpd.blendBack_( gl, dpd.writeId );
+					dpd.blendBack( gl );
 
 				}
 

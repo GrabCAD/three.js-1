@@ -7,6 +7,7 @@ float fragDepth = gl_FragCoord.z;   // 0 - 1
 ivec2 fragCoord = ivec2(gl_FragCoord.xy);
 vec2 lastDepth = texelFetch(uDepthBuffer, fragCoord, 0).rg;
 vec4 lastFrontColor = texelFetch(uColorBuffer, fragCoord, 0);
+//lastFrontColor = vec4(1,0,0,0.5);
 
 // write out next peel. -MAX_DEPTH is effectively a NO OP
 depth.rg = vec2(-MAX_DEPTH);

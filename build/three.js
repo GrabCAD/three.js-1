@@ -17479,7 +17479,12 @@
 		var fragmentGlsl = prefixFragment + fragmentShader;
 
 		fragmentGlsl = dpd.modifyFragmentShader( fragmentGlsl );
-
+	/*
+		if (dpd.isDepthPeelingOn()) {
+			console.log('**************** vertexGlsl ***************\n' + vertexGlsl + '\n************************\n');
+			console.log('**************** fragmentGlsl ***************\n' + fragmentGlsl + '\n************************\n');
+		}
+	*/
 		var glVertexShader = WebGLShader( gl, 35633, vertexGlsl );
 		var glFragmentShader = WebGLShader( gl, 35632, fragmentGlsl );
 
@@ -22754,7 +22759,7 @@
 				var gl = this.renderer.context;
 
 				this.initBuffers_( gl );
-				this.resizeBuffers_( gl.drawingBufferWidth, gl.drawingBufferHeight );
+				this.resizeBuffers( gl.drawingBufferWidth, gl.drawingBufferHeight );
 
 				gl.enable( 3042 );
 				gl.disable( 2929 );
@@ -22914,7 +22919,7 @@ void main() {
 
 			};
 
-			this.resizeBuffers_ = function ( width, height ) {
+			this.resizeBuffers = function ( width, height ) {
 				if ( !this.initialized ) return;
 
 				if (this.bufferSize &&
@@ -22924,18 +22929,28 @@ void main() {
 					return;
 				}
 
-				var arbitraryMinBufferSize = 4;
-				if (!width || !height ||
-					(width < arbitraryMinBufferSize && height < arbitraryMinBufferSize)) {
-					// Test for an arbitrarily small buffer
-					console.warn('WebGLDepthPeeling.resizeBuffers_ called with bad sizes');
-					return;
-				}
+				if (width === -1 && height === -1) {
+					if (this.bufferSize) {
+						width = this.bufferSize.width;
+						height = this.bufferSize.height;
+					} else {
+						console.error('Width and height not set');
+						return;
+					}
+				} else {
+					var arbitraryMinBufferSize = 4;
+					if (!width || !height ||
+						(width < arbitraryMinBufferSize && height < arbitraryMinBufferSize)) {
+						// Test for an arbitrarily small buffer
+						console.warn('WebGLDepthPeeling.resizeBuffers_ called with bad sizes');
+						return;
+					}
 
-				this.bufferSize = {
-					width: width,
-					height: height
-				};
+					this.bufferSize = {
+						width: width,
+						height: height
+					};
+				}
 
 				var gl = this.renderer.context;
 
@@ -23089,59 +23104,63 @@ void main() {
 
 			};
 
-			this.clearBuffersForDraw_ = function ( gl, readId, writeId, init ) {
+			this.beginPass = function( passNum ) {
+				this.passNum = passNum;
+				this.readId = passNum % 2;
+				this.writeId = 1 - this.readId;
+			};
 
-				var DEPTH_CLEAR_VALUE = - 99999.0;
-				var MAX_DEPTH_ = 1.0; // furthest
-				var MIN_DEPTH_ = 0.0; // nearest
+			this.clearBuffersForDraw = function ( gl, init ) {
 
-				gl.bindFramebuffer( 36009, this.depthBuffers[ writeId ] );
-				gl.drawBuffers( [ 36064 ] );
-				gl.clearColor( DEPTH_CLEAR_VALUE, DEPTH_CLEAR_VALUE, 0, 0 );
-				gl.clear( 16384 );
+				const DEPTH_CLEAR_VALUE = -99999.0;
+				const MAX_DEPTH_ = 1.0; // furthest
+				const MIN_DEPTH_ = 0.0; // nearest
 
-				gl.bindFramebuffer( 36009, this.colorBuffers[ writeId ] );
-				gl.drawBuffers( [ 36064, 36064 + 1 ] );
-				gl.clearColor( 0, 0, 0, 0 );
-				gl.clear( 16384 );
+				gl.bindFramebuffer(36009, this.depthBuffers[this.writeId]);
+				gl.drawBuffers([36064]);
+				gl.clearColor(DEPTH_CLEAR_VALUE, DEPTH_CLEAR_VALUE, 0, 0);
+				gl.clear(16384);
 
-				gl.bindFramebuffer( 36009, this.blendBackBuffer );
-				gl.clearColor( 0, 0, 0, 0 );
-				gl.clear( 16384 );
+				gl.bindFramebuffer(36009, this.colorBuffers[this.writeId]);
+				gl.drawBuffers([36064, gl.COLOR_ATTACHMENT1]);
+				gl.clearColor(0, 0, 0, 0);
+				gl.clear(16384);
 
-				if ( init ) {
+				if (init) {
+					gl.bindFramebuffer(36009, this.depthBuffers[this.readId]);
+					gl.clearColor(-MIN_DEPTH_, MAX_DEPTH_, 0, 0);
+					gl.clear(16384);
 
-					gl.bindFramebuffer( 36009, this.depthBuffers[ readId ] );
-					gl.clearColor( - MIN_DEPTH_, MAX_DEPTH_, 0, 0 );
-					gl.clear( 16384 );
-
-					gl.bindFramebuffer( 36009, this.colorBuffers[ readId ] );
-					gl.clearColor( 0, 0, 0, 0 );
-					gl.clear( 16384 );
-
+					gl.bindFramebuffer(36009, this.colorBuffers[this.readId]);
+					gl.clearColor(0, 0, 0, 0);
+					gl.clear(16384);
 				}
 
 			};
 
 			this.initializeBuffersForPass = function ( gl ) {
 
-				for ( var i = 0; i < 2; i ++ ) {
-
-					var o = i * 3;
-
-					gl.activeTexture( this.depthOffset + o );
-					gl.bindTexture( 3553, this.depthTarget[ i ] );
-
-					gl.activeTexture( this.frontColorOffset + o );
-					gl.bindTexture( 3553, this.frontColorTarget[ i ] );
-
-					gl.activeTexture( this.backColorOffset + o );
-					gl.bindTexture( 3553, this.backColorTarget[ i ] );
-
-				}
-
 				gl.activeTexture( 33984 + 6 );
 				gl.bindTexture( 3553, this.blendBackTarget );
+				gl.bindFramebuffer(36009, this.blendBackBuffer);
+				gl.clearColor(0, 0, 0, 0);
+				gl.clear(16384);
+
+				for (let i = 0; i < 2; i++) {
+					let o = i * 3;
+
+					gl.activeTexture(this.depthOffset + o);
+					gl.bindTexture(3553, this.depthTarget[i]);
+
+					gl.activeTexture(this.frontColorOffset + o);
+					gl.bindTexture(3553, this.frontColorTarget[i]);
+
+					gl.activeTexture(this.backColorOffset + o);
+					gl.bindTexture(3553, this.backColorTarget[i]);
+				}
+
+				gl.activeTexture(gl.TEXTURE6);
+				gl.bindTexture(3553, this.blendBackTarget);
 
 			};
 
@@ -23149,11 +23168,17 @@ void main() {
 
 				if (this.isDepthPeelingOn()) {
 					var gl = this.renderer.context;
-
+	/*
+					// Clear input color buffer test - passes. This test changes the color of the next pass
+					gl.bindFramebuffer(36009, this.colorBuffers[this.readId]);
+					gl.drawBuffers([36064, gl.COLOR_ATTACHMENT1]);
+					gl.clearColor(0, 1, 0, 0.5);
+					gl.clear(16384);
+	*/
 					var offsetRead = 3 * this.readId;
 
-					// Buffer bindings seem wrong, nothing is written to the backColorTexture
-
+					console.log('\n\nBinding for pass number:' + this.passNum);
+					console.log('Writing to writeId:' + this.writeId + ' with COLOR_ATTACHMENT 0,1,2');
 					gl.bindFramebuffer( 36009, this.depthBuffers[ this.writeId ] );
 					gl.drawBuffers( [ 36064, 36064 + 1, 36064 + 2 ] );
 					gl.blendEquation( 32776 );
@@ -23161,22 +23186,23 @@ void main() {
 					var uDepthBuffer = gl.getUniformLocation(program, "uDepthBuffer");
 					var uColorBuffer = gl.getUniformLocation(program, "uColorBuffer");
 
+					console.log('Reading from depth:' + offsetRead + ' and color:' + (offsetRead + 1));
 					gl.uniform1i( uDepthBuffer, offsetRead );
 					gl.uniform1i( uColorBuffer, offsetRead + 1 );
 				}
 
 			};
 
-			this.blendBack_ = function ( gl, writeId ) {
+			this.blendBack = function ( gl ) {
 
-				var offsetBack = writeId * 3;
+				var offsetBack = this.writeId * 3;
 				gl.bindFramebuffer( 36009, this.blendBackBuffer );
 				gl.drawBuffers( [ 36064 ] );
 				gl.blendEquation( 32774 );
 				gl.blendFuncSeparate( 770, 771, 1, 771 );
 	/*
-				// buffer testing
-				gl.clearColor(1, 0, 0, 0.5);
+				// buffer testing. This test passes also, the screen background turns blue
+				gl.clearColor(0, 0, 1, 0.5);
 				gl.clear(16384);
 	*/
 
@@ -23256,7 +23282,37 @@ void main() {
 					this.blendBackTarget = null;
 				}
 			};
+
+			this.dumpDepthTexture = function( label, texture ) {
+				var gl = renderer.context;
+				var RG = 0x8227;
+
+				var min = 1e20;
+				var max  = -1e20;
+				var x, y, w = this.bufferSize.width, h = this.bufferSize.height;
+
+				gl.activeTexture( 33984 );
+				gl.bindTexture( 3553, texture );
+				var pixels = new Float32Array(w * h * 4);
+				gl.readPixels(0, 0, w, h, RG, 5126, pixels, 0);
+
+				for (y = 0; y < this.bufferSize.height; y++) {
+					for (x = 0; x < this.bufferSize.width; x++) {
+						var r = pixels[4 * (y * w + x) + 0];
+						var g = pixels[4 * (y * w + x) + 1];
+
+						if (r < min) min = r;
+						if (g < min) min = g;
+
+						if (r > max) max = r;
+						if (g > max) max = g;
+					}
+				}
+				console.log(label + 'min:' + min + ', max:' + max);
+
+			};
 		};
+
 	}
 
 	/**
@@ -23660,7 +23716,7 @@ void main() {
 			this.setViewport( 0, 0, width, height );
 
 			if ( this.depthPeelingData ) {
-				this.depthPeelingData.resizeBuffers_(width, height);
+				this.depthPeelingData.resizeBuffers(width, height);
 			}
 		};
 
@@ -24464,25 +24520,24 @@ void main() {
 				if ( dpd.isDepthPeelingOn() ) {
 
 					var gl = this.context;
-					dpd.readId = 1;
-					dpd.writeId = 0;
 
 					// TODO glState.restore worked in the proto, but not now
 					// var glState = new GLRestoreState( gl );
 					dpd.prepareDbBuffers_( camera );
+					dpd.resizeBuffers( -1, -1 ); // force all the buffers to be rebound
 					dpd.initializeBuffersForPass( gl );
 
 					var numPasses = dpd.getNumDepthPeelingPasses();
 					for ( var dpPass = 0; dpPass < numPasses; dpPass ++ ) {
 
-						dpd.readId = 1 - dpd.readId; // ping-pong: 0 or 1
-						dpd.writeId = 1 - dpd.readId; // ping-pong: 0 or 1
+						dpd.beginPass( dpPass );
+						dpd.clearBuffersForDraw( gl, dpPass === 0 );
 
-						dpd.clearBuffersForDraw_( gl, dpd.readId, dpd.writeId, dpPass === 0 );
-
+						dpd.dumpDepthTexture('Depth input : ', dpd.depthTarget[dpd.readId]);
 						this.renderInner( currentRenderList, scene, camera, forceClear );
+						dpd.dumpDepthTexture('Depth output: ', dpd.depthTarget[dpd.writeId]);
 
-						dpd.blendBack_( gl, dpd.writeId );
+						dpd.blendBack( gl );
 
 					}
 
