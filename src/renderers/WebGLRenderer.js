@@ -130,7 +130,7 @@ function WebGLRenderer( parameters ) {
 	this.autoClearStencil = true;
 
 	// scene graph
-	this.depthPeelingData = new WebGLDepthPeeling(this, 6);
+	this.depthPeelingData = new WebGLDepthPeeling(this, 10);
 	this.sortObjects = this.depthPeelingData.getNumDepthPeelingPasses() === 0;
 
 	this.getDepthPeelingData = function () {
@@ -1257,20 +1257,66 @@ function WebGLRenderer( parameters ) {
 				dpd.initializeBuffersForPass( gl );
 
 				var numPasses = dpd.getNumDepthPeelingPasses();
+//				numPasses = 3;
 				for ( var dpPass = 0; dpPass < numPasses; dpPass ++ ) {
 
 					dpd.beginPass( dpPass );
 					dpd.clearBuffersForDraw( gl, dpPass === 0 );
 
-					//dpd.dumpDepthTexture('Depth input : ', dpd.depthTarget[dpd.readId]);
 					this.renderInner( currentRenderList, scene, camera, forceClear );
-					//dpd.dumpDepthTexture('Depth output: ', dpd.depthTarget[dpd.writeId]);
 
 					dpd.blendBack( gl );
 
 				}
 
-				dpd.blendFinal_( gl, dpd.writeId );
+				var drawBuffersDebug = false;
+				if (!drawBuffersDebug) {
+					dpd.blendFinal_( gl, dpd.writeId );
+				} else {
+					const testFlagNormal = 0;
+					const testFlagDrawFrontColor = 1;
+					const testFlagDrawBackColor = 2;
+					const testFlagDrawDepthBufferRead = 3;
+					const testFlagDrawDepthBufferWrite = 4;
+					const testFlagDrawBlendBackBuffer = 5;
+
+					var buffsToDraw = [
+						testFlagDrawBackColor,
+						testFlagDrawBlendBackBuffer
+					];
+
+					var flagChanged = false;
+					if (this.testIndex === undefined) {
+						this.tick = 0;
+						this.testIndex = 0;
+						flagChanged = true;
+					} else {
+						this.tick++;
+						if (this.tick > 30) {
+							this.tick = 0;
+							this.testIndex++;
+							if (this.testIndex >= buffsToDraw.length) {
+								this.testIndex = 0;
+							}
+							flagChanged = true;
+						}
+					}
+
+					var testFlag = buffsToDraw[this.testIndex];
+					if (testFlag === testFlagNormal)
+						dpd.blendFinal_(gl, dpd.writeId);
+					else if (testFlag === testFlagDrawFrontColor)
+						dpd.drawFrontColorBufferToScreen_(gl, dpd.writeId, flagChanged);
+					else if (testFlag === testFlagDrawBackColor)
+						dpd.drawBackColorBufferToScreen_(gl, dpd.writeId, flagChanged);
+					else if (testFlag === testFlagDrawDepthBufferRead)
+						dpd.drawDepthBufferToScreen_(gl, dpd.readId, flagChanged);
+					else if (testFlag === testFlagDrawDepthBufferWrite)
+						dpd.drawDepthBufferToScreen_(gl, dpd.writeId, flagChanged);
+					else if (testFlag === testFlagDrawBlendBackBuffer)
+						dpd.drawBlendBackBufferToScreen_(gl, flagChanged);
+				}
+
 				// glState.restore( gl );
 				// gl.depthMask( true );
 

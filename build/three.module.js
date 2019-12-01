@@ -17473,12 +17473,13 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 	var fragmentGlsl = prefixFragment + fragmentShader;
 
 	fragmentGlsl = dpd.modifyFragmentShader( fragmentGlsl );
-/*
-	if (dpd.isDepthPeelingOn()) {
-		console.log('**************** vertexGlsl ***************\n' + vertexGlsl + '\n************************\n');
-		console.log('**************** fragmentGlsl ***************\n' + fragmentGlsl + '\n************************\n');
-	}
-*/
+
+	if (dpd.depthPeelingRender)
+		if (dpd.isDepthPeelingOn())
+				console.log('**************** fragmentGlsl: Dp ON *****************\n' + fragmentGlsl + '\n************************\n');
+			else
+				console.log('**************** fragmentGlsl: Dp OFF ****************\n' + fragmentGlsl + '\n************************\n');
+
 	var glVertexShader = WebGLShader( gl, 35633, vertexGlsl );
 	var glFragmentShader = WebGLShader( gl, 35632, fragmentGlsl );
 
@@ -22662,13 +22663,13 @@ function WebXRManager( renderer ) {
 
 }
 
-var depthPeelingPrefixChunk = "#ifdef DEPTH_PEELING\n#define MAX_DEPTH 99999.0\nuniform sampler2D uDepthBuffer;\nuniform sampler2D uColorBuffer;\nlayout(location=0) out vec2 depth;\nlayout(location=1) out vec4 outFrontColor;\nlayout(location=2) out vec4 outBackColor;\n#endif";
+var depthPeelingPrefixChunk = "#ifdef DEPTH_PEELING\n#define MAX_DEPTH 99999.0\nuniform sampler2D depthBufferIn;\nuniform sampler2D frontColorIn;\nlayout(location=0) out vec2 depth;\nlayout(location=1) out vec4 outFrontColor;\nlayout(location=2) out vec4 outBackColor;\n#endif";
 
 var gammaFuncs = "#ifdef DEPTH_PEELING\n#if 0\n\tfloat lin(float inVal)\n\t{\n\t\tfloat gamma = 2.2;\n\t\treturn pow(abs(inVal), gamma);\n\t}\n\t\n\tvec3 lin(vec3 inVal)\n\t{\n\t\treturn vec3(lin(inVal.r), lin(inVal.g), lin(inVal.b));\n\t}\n\tfloat nonLin(float inVal)\n\t{\n\t\tfloat gammaInv = 1.0 / 2.2;\n\t\treturn pow(abs(inVal), gammaInv);\n\t}\n\tvec3 nonLin(vec3 inVal)\n\t{\n\t\treturn vec3(\n\t\t\tnonLin(inVal.r), \n\t\t\tnonLin(inVal.g), \n\t\t\tnonLin(inVal.b)\n\t\t);\n\t}\n#else\n#define lin(inVal) inVal\n#define nonLin(inVal) inVal\n#endif\n#endif";
 
-var depthPeelingMainPrefixChunk = "#ifdef DEPTH_PEELING\nfloat fragDepth = gl_FragCoord.z;\nivec2 fragCoord = ivec2(gl_FragCoord.xy);\nvec2 lastDepth = texelFetch(uDepthBuffer, fragCoord, 0).rg;\nvec4 lastFrontColor = texelFetch(uColorBuffer, fragCoord, 0);\ndepth.rg = vec2(-MAX_DEPTH);\noutFrontColor = lastFrontColor;\noutBackColor = vec4(0.0);\nfloat nearestDepth = -lastDepth.x;\nfloat furthestDepth = lastDepth.y;\nif (fragDepth < nearestDepth || fragDepth > furthestDepth) {\n\treturn;\n}\nif (fragDepth > nearestDepth && fragDepth < furthestDepth) {\n\tdepth.rg = vec2(-fragDepth, fragDepth);\n\treturn;\n}\n#endif";
+var depthPeelingMainPrefixChunk = "#ifdef DEPTH_PEELING\nfloat fragDepth = gl_FragCoord.z;\nivec2 fragCoord = ivec2(gl_FragCoord.xy);\nvec2 lastDepth = texelFetch(depthBufferIn, fragCoord, 0).rg;\noutFrontColor = texelFetch(frontColorIn, fragCoord, 0);\noutBackColor = vec4(0.0);\ndepth.rg = vec2(-MAX_DEPTH);\nfloat nearestDepth = -lastDepth.x;\nfloat furthestDepth = lastDepth.y;\nif (fragDepth < nearestDepth || fragDepth > furthestDepth) {\n\t\treturn;\n}\nif (fragDepth > nearestDepth && fragDepth < furthestDepth) {\n\t\tdepth.rg = vec2(-fragDepth, fragDepth);\n\t\treturn;\n}\n#endif";
 
-var depthPeelingMainSuffixChunk = "#ifdef DEPTH_PEELING\nif (fragDepth == nearestDepth) {\n\tvec4 farColor = three_FragColor;\n\tvec4 nearColor = outFrontColor;\n\tfloat nearLinAlpha = lin(nearColor.a); \n\tfloat farLinAlpha = lin(farColor.a); \n\tfloat alphaMultiplier = 1.0 - nearLinAlpha;\n\toutFrontColor.rgb = nonLin(lin(farColor.rgb) * farLinAlpha * alphaMultiplier +\n\t\tlin(nearColor.rgb) * farLinAlpha);\n\toutFrontColor.a = nonLin(farLinAlpha * farLinAlpha * alphaMultiplier + nearLinAlpha);\n\toutFrontColor = three_FragColor;\n} else {\n\toutBackColor = three_FragColor;\n}\n#else\ngl_FragColor = three_FragColor;\t\n#endif";
+var depthPeelingMainSuffixChunk = "#ifdef DEPTH_PEELING\nif (fragDepth == nearestDepth) {\n\tvec4 farColor = three_FragColor;\n\tvec4 nearColor = outFrontColor;\n\tfloat nearLinAlpha = lin(nearColor.a); \n\tfloat farLinAlpha = lin(farColor.a); \n\tfloat alphaMultiplier = 1.0 - nearLinAlpha;\n\toutFrontColor.rgb = nonLin(lin(farColor.rgb) * farLinAlpha * alphaMultiplier +\n\t\tlin(nearColor.rgb) * farLinAlpha);\n\toutFrontColor.a = nonLin(farLinAlpha * farLinAlpha * alphaMultiplier + nearLinAlpha);\n} else {\n\toutBackColor = three_FragColor;\n}\n#else\ngl_FragColor = three_FragColor;\t\n#endif";
 
 class WebGLDepthPeeling {
 
@@ -22678,7 +22679,7 @@ class WebGLDepthPeeling {
 			constructor() {
 
 				this.program = null;
-				this.uColorBuffer = null;
+				this.frontColorInLoc = null;
 				this.uBackColorBuffer = null;
 
 			}
@@ -22707,7 +22708,7 @@ class WebGLDepthPeeling {
 			var result = this.isDepthPeelingOn() ? [
 				'#define DEPTH_PEELING 1',
 				depthPeelingPrefixChunk,
-				gammaFuncs,
+				gammaFuncs
 			].join('\n') : '';
 
 			return result;
@@ -22746,6 +22747,12 @@ class WebGLDepthPeeling {
 				'gl_FragColor = three_FragColor;';
 			fragmentGlsl = fragmentGlsl.substring(0 , fragmentGlsl.length - 1);
 			fragmentGlsl = fragmentGlsl + '\n' + fragmentGlslSuffix + '\n}';
+
+/*
+			 if ( depthPeelingEnabled ) {
+			 console.warn("***************************fragmentGlsl:\n" + fragmentGlsl + '\n***************************\n')
+			 }
+*/
 
 			return fragmentGlsl;
 		};
@@ -22802,8 +22809,9 @@ class WebGLDepthPeeling {
 			var srcFragmentShaderFinal =
 `#version 300 es
 precision highp float;
-uniform sampler2D uColorBuffer;
+uniform sampler2D frontColorIn;
 uniform sampler2D uBackColorBuffer;
+uniform int testMode;
 
 #define DEPTH_PEELING 1
 ` + gammaFuncs + `\n			
@@ -22813,17 +22821,45 @@ void main() {
 	// See more complete description in peeling fragment shader
 
 	ivec2 fragCoord = ivec2(gl_FragCoord.xy);
-	vec4 frontColor = texelFetch(uColorBuffer, fragCoord, 0);
-	vec4 backColor = texelFetch(uBackColorBuffer, fragCoord, 0);
-	float alphaMultiplier = 1.0 - lin(frontColor.a);
+	if (testMode == 0) {
+		vec4 frontColor = texelFetch(frontColorIn, fragCoord, 0);
+		vec4 backColor = texelFetch(uBackColorBuffer, fragCoord, 0);
+	
+		float alphaMultiplier = 1.0 - lin(frontColor.a);
+	
+		vec3 color = nonLin(lin(frontColor.rgb) + alphaMultiplier * lin(backColor.rgb));
+	
+	
+		fragColor = vec4(
+			color,
+			nonLin(lin(frontColor.a) + lin(backColor.a))
+		);
+	} else if (testMode == 1) {
+		vec2 depth = texelFetch(frontColorIn, fragCoord.xy, 0).rg;
+		float farDepth = -depth.x;
+		float nearDepth = depth.y;
 
-	vec3 color = nonLin(lin(frontColor.rgb) + alphaMultiplier * lin(backColor.rgb));
+		float thresh = 0.5;
+		float step = 0.25;
+		thresh += step; step *= 0.5;
+		thresh -= step; step *= 0.5;
+		thresh += step; step *= 0.5;
+		thresh -= step; step *= 0.5;
+		thresh += step; step *= 0.5;
+		thresh += step; step *= 0.5;
+		thresh += step; step *= 0.5;
+		thresh -= step; step *= 0.5;
+		
+		float r = (farDepth - thresh) * 1.0 + 0.5;
+		float g = (nearDepth - thresh) * 1.0 + 0.5;
 
+		fragColor = vec4(farDepth, nearDepth, 0, 1);
 
-	fragColor = vec4(
-		color,
-		nonLin(lin(frontColor.a) + lin(backColor.a))
-	);
+	} else {
+
+		fragColor = texelFetch(frontColorIn, fragCoord, 0);
+
+	}
 }
 `;
 
@@ -22886,7 +22922,7 @@ void main() {
 			this.blBackPrgData.uBackColorBuffer = gl.getUniformLocation( this.blBackPrgData.program, "uBackColorBuffer" );
 
 			this.finPrgData.program = createProgram( fullScreenQuadVertexShader, finalFragmentShader, "finPrgData" );
-			this.finPrgData.uColorBuffer = gl.getUniformLocation( this.finPrgData.program, "uColorBuffer" );
+			this.finPrgData.frontColorInLoc = gl.getUniformLocation( this.finPrgData.program, "frontColorIn" );
 			this.finPrgData.uBackColorBuffer = gl.getUniformLocation( this.finPrgData.program, "uBackColorBuffer" );
 
 		};
@@ -22954,7 +22990,12 @@ void main() {
 
 		function resizeBuffer_ (gl, params ) {
 
-			gl.activeTexture( 33984 + params.texOffset );
+			console.log(`binding and sizing buffers.
+			texUnit     :` + params.texUnit +`
+			attachOffset:` + params.attachOffset +`
+			`);
+
+			gl.activeTexture( 33984 + params.texUnit );
 			gl.bindTexture( 3553, params.texture );
 			gl.texParameteri( 3553, 10240, 9728 );
 			gl.texParameteri( 3553, 10241, 9728 );
@@ -22973,7 +23014,7 @@ void main() {
 			);
 			gl.framebufferTexture2D(
 				36160,
-				params.attachment,
+				36064 + params.attachOffset,
 				3553,
 				params.texture,
 				0
@@ -22983,24 +23024,24 @@ void main() {
 
 		function resizeDepthBuffer_ (gl, texOffset, attachOffset, texture) {
 			resizeBuffer_( gl, {
-				texOffset: texOffset,
+				texUnit: texOffset + attachOffset,
+				attachOffset: attachOffset,
 				texture: texture,
-				attachment: 36064,
 				internalFormat: gl.RG32F,
 				format: gl.RG,
-				type: 5126,
+				type: 5126
 			});
 
 		}
 
 		function resizeColorBuffer_ (gl, texOffset, attachOffset, texture) {
 			resizeBuffer_( gl, {
-				texOffset: texOffset,
+				texUnit: texOffset + attachOffset,
 				texture: texture,
-				attachment: 36064 + attachOffset,
+				attachOffset: attachOffset,
 				internalFormat: 34842,
 				format: 6408,
-				type: 5131,
+				type: 5131
 			});
 
 		}
@@ -23008,21 +23049,9 @@ void main() {
 		function bindColorBuffers_(gl, pingPongIndex ) {
 
 			gl.bindFramebuffer( 36160, _this.colorBuffers[ pingPongIndex ] );
-
-			gl.framebufferTexture2D(
-				36160,
-				36064,
-				3553,
-				_this.frontColorTarget[ pingPongIndex ],
-				0
-			);
-			gl.framebufferTexture2D(
-				36160,
-				36064 + 1,
-				3553,
-				_this.backColorTarget[ pingPongIndex ],
-				0
-			);
+			gl.framebufferTexture2D( 36160, 36064, 3553, _this.frontColorTarget[ pingPongIndex ], 0 );
+			gl.framebufferTexture2D( 36160, gl.COLOR_ATTACHMENT1, 3553, _this.backColorTarget [ pingPongIndex ], 0 );
+			gl.bindFramebuffer( 36160, null );
 
 		}
 
@@ -23034,19 +23063,24 @@ void main() {
 			resizeDepthBuffer_( gl, texOffset, 0, _this.depthTarget[ pingPongIndex ] );
 			resizeColorBuffer_( gl, texOffset, 1, _this.frontColorTarget[ pingPongIndex ] );
 			resizeColorBuffer_( gl, texOffset, 2, _this.backColorTarget[ pingPongIndex ] );
+
+			gl.bindFramebuffer( 36160, null );
+
 		}
 
 		function resizeBackBuffer_ (gl) {
 
 			gl.bindFramebuffer( 36160, _this.blendBackBuffer );
 			resizeBuffer_( gl, {
-				texOffset: 6,
+				texUnit: 6,
 				texture: _this.blendBackTarget,
-				attachment: 36064 + 6,
+				attachOffset: 0,
 				internalFormat: 34842,
 				format: 6408,
-				type: 5131,
+				type: 5131
 			});
+
+			gl.bindFramebuffer( 36160, null );
 
 		}
 
@@ -23056,14 +23090,14 @@ void main() {
 
 				var gl = this.renderer.context;
 
-				for ( var i = 0; i < 2; i ++ ) {
+				resizeDepthBuffers_( gl, 0 );
+				bindColorBuffers_( gl, 0 );
 
-					resizeDepthBuffers_( gl, i );
-					bindColorBuffers_( gl, i );
-
-				}
+				resizeDepthBuffers_( gl, 1 );
+				bindColorBuffers_( gl, 1 );
 
 				resizeBackBuffer_( gl );
+
 				gl.bindFramebuffer( 36160, null );
 
 			}
@@ -23094,18 +23128,17 @@ void main() {
 		};
 
 		this.clearBuffersForDraw = function ( gl, init ) {
+			this.initializeBuffersForPass( gl );
 
 			const DEPTH_CLEAR_VALUE = -99999.0;
 			const MAX_DEPTH_ = 1.0; // furthest
 			const MIN_DEPTH_ = 0.0; // nearest
 
 			gl.bindFramebuffer(36009, this.depthBuffers[this.writeId]);
-			gl.drawBuffers([36064]);
 			gl.clearColor(DEPTH_CLEAR_VALUE, DEPTH_CLEAR_VALUE, 0, 0);
 			gl.clear(16384);
 
 			gl.bindFramebuffer(36009, this.colorBuffers[this.writeId]);
-			gl.drawBuffers([36064, gl.COLOR_ATTACHMENT1]);
 			gl.clearColor(0, 0, 0, 0);
 			gl.clear(16384);
 
@@ -23119,31 +23152,34 @@ void main() {
 				gl.clear(16384);
 			}
 
-		};
-
-		this.initializeBuffersForPass = function ( gl ) {
-
-			gl.activeTexture( 33984 + 6 );
-			gl.bindTexture( 3553, this.blendBackTarget );
 			gl.bindFramebuffer(36009, this.blendBackBuffer);
 			gl.clearColor(0, 0, 0, 0);
 			gl.clear(16384);
 
-			for (let i = 0; i < 2; i++) {
-				let o = i * 3;
+		};
 
-				gl.activeTexture(this.depthOffset + o);
-				gl.bindTexture(3553, this.depthTarget[i]);
+		this.initializeBuffersForPass = function ( gl ) {
 
-				gl.activeTexture(this.frontColorOffset + o);
-				gl.bindTexture(3553, this.frontColorTarget[i]);
+			gl.activeTexture(33984 + 0);
+			gl.bindTexture(3553, this.depthTarget[0]);
 
-				gl.activeTexture(this.backColorOffset + o);
-				gl.bindTexture(3553, this.backColorTarget[i]);
-			}
+			gl.activeTexture(33984 + 1);
+			gl.bindTexture(3553, this.frontColorTarget[0]);
 
-			gl.activeTexture(gl.TEXTURE6);
-			gl.bindTexture(3553, this.blendBackTarget);
+			gl.activeTexture(33984 + 2);
+			gl.bindTexture(3553, this.backColorTarget[0]);
+
+			gl.activeTexture(33984 + 3);
+			gl.bindTexture(3553, this.depthTarget[1]);
+
+			gl.activeTexture(33984 + 4);
+			gl.bindTexture(3553, this.frontColorTarget[1]);
+
+			gl.activeTexture(33984 + 5);
+			gl.bindTexture(3553, this.backColorTarget[1]);
+
+			gl.activeTexture( 33984 + 6 );
+			gl.bindTexture( 3553, this.blendBackTarget );
 
 		};
 
@@ -23158,17 +23194,18 @@ void main() {
 				gl.clearColor(0, 1, 0, 0.5);
 				gl.clear(16384);
 */
+
 				var offsetRead = 3 * this.readId;
 
 				gl.bindFramebuffer( 36009, this.depthBuffers[ this.writeId ] );
 				gl.drawBuffers( [ 36064, 36064 + 1, 36064 + 2 ] );
 				gl.blendEquation( 32776 );
 
-				var uDepthBuffer = gl.getUniformLocation(program, "uDepthBuffer");
-				var uColorBuffer = gl.getUniformLocation(program, "uColorBuffer");
+				var depthBufferInLoc = gl.getUniformLocation(program, "depthBufferIn");
+				var frontColorInLoc = gl.getUniformLocation(program, "frontColorIn");
 
-				gl.uniform1i( uDepthBuffer, offsetRead );
-				gl.uniform1i( uColorBuffer, offsetRead + 1 );
+				gl.uniform1i( depthBufferInLoc, offsetRead );
+				gl.uniform1i( frontColorInLoc, offsetRead + 1 ); // Read from front color
 			}
 
 		};
@@ -23188,7 +23225,7 @@ void main() {
 
 			gl.useProgram( this.blBackPrgData.program );
 			var backColorLoc = gl.getUniformLocation( this.blBackPrgData.program, "uBackColorBuffer" );
-			gl.uniform1i( backColorLoc, offsetBack + 2 );
+			gl.uniform1i( backColorLoc, offsetBack + 2 ); // Read from back color
 
 			this.drawQuads_( gl );
 
@@ -23211,14 +23248,99 @@ void main() {
 
 			gl.useProgram(this.finPrgData.program);
 
-			var uColorBufferLoc = gl.getUniformLocation( this.finPrgData.program, "uColorBuffer" );
-			var uBackColorBuffer = gl.getUniformLocation( this.finPrgData.program, "uBackColorBuffer" );
+			var testModeLoc = gl.getUniformLocation( this.finPrgData.program, "testMode" );
+			gl.uniform1i(testModeLoc, 0); // Read from front color buffer
 
-			gl.uniform1i(uColorBufferLoc, offsetBack + 1);
-			gl.uniform1i(uBackColorBuffer, 6);
+			var frontColorInLoc = gl.getUniformLocation( this.finPrgData.program, "frontColorIn" );
+			gl.uniform1i(frontColorInLoc, offsetBack + 1); // Read from front color buffer
+
+			var uBackColorBuffer = gl.getUniformLocation( this.finPrgData.program, "uBackColorBuffer" );
+			gl.uniform1i(uBackColorBuffer, 6); // Read from blend back buffer
 
 			this.drawQuads_(gl);
 
+		};
+
+		this.drawDepthBufferToScreen_ = function ( gl, id, flagChanged ) {
+			if (flagChanged) {
+				var testStr = 'depth ' + (id == this.readId ? 'read' : 'write');
+				console.warn('testFlag: ' + testStr);
+			}
+
+			let offsetBack = id * 3;
+			gl.bindFramebuffer(36160, null);
+			gl.blendFunc(1, 771);
+
+			gl.useProgram(this.finPrgData.program);
+
+			var testModeLoc = gl.getUniformLocation( this.finPrgData.program, "testMode" );
+			gl.uniform1i(testModeLoc, 1 ); // Read from front color buffer
+
+			var frontColorInLoc = gl.getUniformLocation( this.finPrgData.program, "frontColorIn" );
+			gl.uniform1i(frontColorInLoc, offsetBack + 0); // Read from front color buffer
+
+			this.drawQuads_(gl);
+		};
+
+		this.drawFrontColorBufferToScreen_ = function ( gl, id, flagChanged ) {
+			if (flagChanged) {
+				var testStr = 'front ' + (id == this.readId ? 'read' : 'write');
+				console.warn('testFlag: ' + testStr);
+			}
+
+			let offsetBack = id * 3;
+			gl.bindFramebuffer(36160, null);
+			gl.blendFunc(1, 771);
+
+			gl.useProgram(this.finPrgData.program);
+
+			var testModeLoc = gl.getUniformLocation( this.finPrgData.program, "testMode" );
+			gl.uniform1i(testModeLoc, 2 ); // Read from front color buffer
+
+			var frontColorInLoc = gl.getUniformLocation( this.finPrgData.program, "frontColorIn" );
+			gl.uniform1i(frontColorInLoc, offsetBack + 1); // Read from front color buffer
+
+			this.drawQuads_(gl);
+		};
+
+		this.drawBackColorBufferToScreen_ = function ( gl, id, flagChanged ) {
+			if (flagChanged) {
+				var testStr = 'back ' + (id == this.readId ? 'read' : 'write');
+				console.warn('testFlag: ' + testStr);
+			}
+
+			let offsetBack = id * 3;
+			gl.bindFramebuffer(36160, null);
+			gl.blendFunc(1, 771);
+
+			gl.useProgram(this.finPrgData.program);
+
+			var testModeLoc = gl.getUniformLocation( this.finPrgData.program, "testMode" );
+			gl.uniform1i(testModeLoc, 2); // Read from front color buffer
+
+			var frontColorInLoc = gl.getUniformLocation( this.finPrgData.program, "frontColorIn" );
+			gl.uniform1i(frontColorInLoc, offsetBack + 2); // Read from back color buffer
+
+			this.drawQuads_(gl);
+		};
+
+		this.drawBlendBackBufferToScreen_ = function ( gl, flagChanged ) {
+			if (flagChanged) {
+				console.warn('testFlag: back');
+			}
+
+			gl.bindFramebuffer(36160, null);
+			gl.blendFunc(1, 771);
+
+			gl.useProgram(this.finPrgData.program);
+
+			var testModeLoc = gl.getUniformLocation( this.finPrgData.program, "testMode" );
+			gl.uniform1i(testModeLoc, 2); // Read from front color buffer
+
+			var uBackColorBuffer = gl.getUniformLocation( this.finPrgData.program, "uBackColorBuffer" );
+			gl.uniform1i(uBackColorBuffer, 6); // Read from blend back buffer
+
+			this.drawQuads_(gl);
 		};
 
 		this.drawQuads_ = function ( gl ) {
@@ -23263,34 +23385,6 @@ void main() {
 			}
 		};
 
-		this.dumpDepthTexture = function( label, texture ) {
-			var gl = renderer.context;
-			var RG = 0x8227;
-
-			var min = 1e20;
-			var max  = -1e20;
-			var x, y, w = this.bufferSize.width, h = this.bufferSize.height;
-
-			gl.activeTexture( 33984 );
-			gl.bindTexture( 3553, texture );
-			var pixels = new Float32Array(w * h * 4);
-			gl.readPixels(0, 0, w, h, RG, 5126, pixels, 0);
-
-			for (y = 0; y < this.bufferSize.height; y++) {
-				for (x = 0; x < this.bufferSize.width; x++) {
-					var r = pixels[4 * (y * w + x) + 0];
-					var g = pixels[4 * (y * w + x) + 1];
-
-					if (r < min) min = r;
-					if (g < min) min = g;
-
-					if (r > max) max = r;
-					if (g > max) max = g;
-				}
-			}
-			console.log(label + 'min:' + min + ', max:' + max);
-
-		};
 	};
 
 }
@@ -23380,7 +23474,7 @@ function WebGLRenderer( parameters ) {
 	this.autoClearStencil = true;
 
 	// scene graph
-	this.depthPeelingData = new WebGLDepthPeeling(this, 6);
+	this.depthPeelingData = new WebGLDepthPeeling(this, 10);
 	this.sortObjects = this.depthPeelingData.getNumDepthPeelingPasses() === 0;
 
 	this.getDepthPeelingData = function () {
@@ -24507,20 +24601,66 @@ function WebGLRenderer( parameters ) {
 				dpd.initializeBuffersForPass( gl );
 
 				var numPasses = dpd.getNumDepthPeelingPasses();
+//				numPasses = 3;
 				for ( var dpPass = 0; dpPass < numPasses; dpPass ++ ) {
 
 					dpd.beginPass( dpPass );
 					dpd.clearBuffersForDraw( gl, dpPass === 0 );
 
-					//dpd.dumpDepthTexture('Depth input : ', dpd.depthTarget[dpd.readId]);
 					this.renderInner( currentRenderList, scene, camera, forceClear );
-					//dpd.dumpDepthTexture('Depth output: ', dpd.depthTarget[dpd.writeId]);
 
 					dpd.blendBack( gl );
 
 				}
 
-				dpd.blendFinal_( gl, dpd.writeId );
+				var drawBuffersDebug = false;
+				if (!drawBuffersDebug) {
+					dpd.blendFinal_( gl, dpd.writeId );
+				} else {
+					const testFlagNormal = 0;
+					const testFlagDrawFrontColor = 1;
+					const testFlagDrawBackColor = 2;
+					const testFlagDrawDepthBufferRead = 3;
+					const testFlagDrawDepthBufferWrite = 4;
+					const testFlagDrawBlendBackBuffer = 5;
+
+					var buffsToDraw = [
+						testFlagDrawBackColor,
+						testFlagDrawBlendBackBuffer
+					];
+
+					var flagChanged = false;
+					if (this.testIndex === undefined) {
+						this.tick = 0;
+						this.testIndex = 0;
+						flagChanged = true;
+					} else {
+						this.tick++;
+						if (this.tick > 30) {
+							this.tick = 0;
+							this.testIndex++;
+							if (this.testIndex >= buffsToDraw.length) {
+								this.testIndex = 0;
+							}
+							flagChanged = true;
+						}
+					}
+
+					var testFlag = buffsToDraw[this.testIndex];
+					if (testFlag === testFlagNormal)
+						dpd.blendFinal_(gl, dpd.writeId);
+					else if (testFlag === testFlagDrawFrontColor)
+						dpd.drawFrontColorBufferToScreen_(gl, dpd.writeId, flagChanged);
+					else if (testFlag === testFlagDrawBackColor)
+						dpd.drawBackColorBufferToScreen_(gl, dpd.writeId, flagChanged);
+					else if (testFlag === testFlagDrawDepthBufferRead)
+						dpd.drawDepthBufferToScreen_(gl, dpd.readId, flagChanged);
+					else if (testFlag === testFlagDrawDepthBufferWrite)
+						dpd.drawDepthBufferToScreen_(gl, dpd.writeId, flagChanged);
+					else if (testFlag === testFlagDrawBlendBackBuffer)
+						dpd.drawBlendBackBufferToScreen_(gl, flagChanged);
+				}
+
 				// glState.restore( gl );
 				// gl.depthMask( true );
 

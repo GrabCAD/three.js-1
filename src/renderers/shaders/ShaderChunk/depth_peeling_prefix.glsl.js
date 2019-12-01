@@ -3,8 +3,8 @@ export default /* glsl */`
 
 #define MAX_DEPTH 99999.0
 
-uniform sampler2D uDepthBuffer;
-uniform sampler2D uColorBuffer;
+uniform sampler2D depthBufferIn;
+uniform sampler2D frontColorIn;
 
 // RG32F, R - negative front depth, G - back depth
 layout(location=0) out vec2 depth;
