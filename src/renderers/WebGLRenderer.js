@@ -1242,72 +1242,25 @@ function WebGLRenderer( parameters ) {
 
 		if ( currentRenderList ) {
 
-			if ( dpd.isDepthPeelingOn() ) {
+			// TODO It may be worth hiding this whole branch in the DepthPeeling class. IMO it's not worth it
+			// at this time. This makes it clear that the render is quite different than usual and I think
+			// that's a good thing.
 
-				var gl = this.context;
+			if ( dpd.isDepthPeelingOn() ) {
 
 				// TODO glState.restore worked in the proto, but not now
 				// var glState = new GLRestoreState( gl );
-				dpd.prepareDbBuffers( camera );
+
+				dpd.beginDrawLoop( camera );
 				var numPasses = dpd.getNumDepthPeelingPasses();
-//				numPasses = 3;
 				for ( var dpPass = 0; dpPass < numPasses; dpPass ++ ) {
 
 					dpd.beginPass( dpPass );
-
 					this.renderInner( currentRenderList, scene, camera, forceClear );
-
-					dpd.blendBack( gl );
+					dpd.endPass();
 
 				}
-
-				var drawBuffersDebug = false;
-				if (!drawBuffersDebug) {
-					dpd.blendFinal( gl );
-				} else {
-					const testFlagNormal = 0;
-					const testFlagDrawFrontColor = 1;
-					const testFlagDrawBackColor = 2;
-					const testFlagDrawDepthBufferRead = 3;
-					const testFlagDrawDepthBufferWrite = 4;
-					const testFlagDrawBlendBackBuffer = 5;
-
-					var buffsToDraw = [
-						testFlagDrawBackColor,
-						testFlagDrawBlendBackBuffer
-					];
-
-					var flagChanged = false;
-					if (this.testIndex === undefined) {
-						this.tick = 0;
-						this.testIndex = 0;
-						flagChanged = true;
-					} else {
-						this.tick++;
-						if (this.tick > 30) {
-							this.tick = 0;
-							this.testIndex++;
-							if (this.testIndex >= buffsToDraw.length) {
-								this.testIndex = 0;
-							}
-							flagChanged = true;
-						}
-					}
-
-					var testFlag = buffsToDraw[this.testIndex];
-					if (testFlag === testFlagNormal)
-						dpd.blendFinal( gl );
-					else if (testFlag === testFlagDrawFrontColor)
-						dpd.drawFrontColorBufferToScreen_(gl, dpd.writeId, flagChanged);
-					else if (testFlag === testFlagDrawBackColor)
-						dpd.drawBackColorBufferToScreen_(gl, dpd.writeId, flagChanged);
-					else if (testFlag === testFlagDrawDepthBufferRead)
-						dpd.drawDepthBufferToScreen_(gl, dpd.readId, flagChanged);
-					else if (testFlag === testFlagDrawDepthBufferWrite)
-						dpd.drawDepthBufferToScreen_(gl, dpd.writeId, flagChanged);
-					else if (testFlag === testFlagDrawBlendBackBuffer)
-						dpd.drawBlendBackBufferToScreen_(gl, flagChanged);
-				}
+				dpd.endDrawLoop();
 
 				// glState.restore( gl );
 				// gl.depthMask( true );
