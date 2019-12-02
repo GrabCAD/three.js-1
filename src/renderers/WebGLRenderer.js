@@ -1249,14 +1249,11 @@ function WebGLRenderer( parameters ) {
 				// TODO glState.restore worked in the proto, but not now
 				// var glState = new GLRestoreState( gl );
 				dpd.prepareDbBuffers( camera );
-				dpd.initializeBuffersForPass( gl );
-
 				var numPasses = dpd.getNumDepthPeelingPasses();
 //				numPasses = 3;
 				for ( var dpPass = 0; dpPass < numPasses; dpPass ++ ) {
 
 					dpd.beginPass( dpPass );
-					dpd.clearBuffersForDraw( gl, dpPass === 0 );
 
 					this.renderInner( currentRenderList, scene, camera, forceClear );
 

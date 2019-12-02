@@ -466,14 +466,32 @@ void main() {
 
 		};
 
-		this.beginPass = function( passNum ) {
-			this.passNum = passNum;
-			this.readId = passNum % 2;
-			this.writeId = 1 - this.readId;
+		function initializeBuffersForPass_() {
+
+			_gl.activeTexture(_gl.TEXTURE0 + 0 + _depthTexUnitOffset);
+			_gl.bindTexture(_gl.TEXTURE_2D, this.depthTarget[0]);
+
+			_gl.activeTexture(_gl.TEXTURE0 + 0 + _frontColorTexUnitOffset);
+			_gl.bindTexture(_gl.TEXTURE_2D, this.frontColorTarget[0]);
+
+			_gl.activeTexture(_gl.TEXTURE0 + 0 + _backColorTexUnitOffset);
+			_gl.bindTexture(_gl.TEXTURE_2D, this.backColorTarget[0]);
+
+			_gl.activeTexture(_gl.TEXTURE0 + 3 + _depthTexUnitOffset);
+			_gl.bindTexture(_gl.TEXTURE_2D, this.depthTarget[1]);
+
+			_gl.activeTexture(_gl.TEXTURE0 + 3 + _frontColorTexUnitOffset);
+			_gl.bindTexture(_gl.TEXTURE_2D, this.frontColorTarget[1]);
+
+			_gl.activeTexture(_gl.TEXTURE0 + 3 + _backColorTexUnitOffset);
+			_gl.bindTexture(_gl.TEXTURE_2D, this.backColorTarget[1]);
+
+			_gl.activeTexture( _gl.TEXTURE0 + _blendBackTexUnit );
+			_gl.bindTexture( _gl.TEXTURE_2D, this.blendBackTarget );
+
 		};
 
-		this.clearBuffersForDraw = function ( gl, init ) {
-			this.initializeBuffersForPass( _gl );
+		function clearBuffersForDraw_ ( init ) {
 
 			const DEPTH_CLEAR_VALUE = -99999.0;
 			const MAX_DEPTH_ = 1.0; // furthest
@@ -503,29 +521,12 @@ void main() {
 
 		};
 
-		this.initializeBuffersForPass = function ( _gl ) {
-
-			_gl.activeTexture(_gl.TEXTURE0 + 0 + _depthTexUnitOffset);
-			_gl.bindTexture(_gl.TEXTURE_2D, this.depthTarget[0]);
-
-			_gl.activeTexture(_gl.TEXTURE0 + 0 + _frontColorTexUnitOffset);
-			_gl.bindTexture(_gl.TEXTURE_2D, this.frontColorTarget[0]);
-
-			_gl.activeTexture(_gl.TEXTURE0 + 0 + _backColorTexUnitOffset);
-			_gl.bindTexture(_gl.TEXTURE_2D, this.backColorTarget[0]);
-
-			_gl.activeTexture(_gl.TEXTURE0 + 3 + _depthTexUnitOffset);
-			_gl.bindTexture(_gl.TEXTURE_2D, this.depthTarget[1]);
-
-			_gl.activeTexture(_gl.TEXTURE0 + 3 + _frontColorTexUnitOffset);
-			_gl.bindTexture(_gl.TEXTURE_2D, this.frontColorTarget[1]);
-
-			_gl.activeTexture(_gl.TEXTURE0 + 3 + _backColorTexUnitOffset);
-			_gl.bindTexture(_gl.TEXTURE_2D, this.backColorTarget[1]);
-
-			_gl.activeTexture( _gl.TEXTURE0 + _blendBackTexUnit );
-			_gl.bindTexture( _gl.TEXTURE_2D, this.blendBackTarget );
-
+		this.beginPass = function( passNum ) {
+			this.passNum = passNum;
+			this.readId = passNum % 2;
+			this.writeId = 1 - this.readId;
+			initializeBuffersForPass_();
+			clearBuffersForDraw_(passNum === 0);
 		};
 
 		this.bindBuffersForDraw = function ( tjsProgram ) {
