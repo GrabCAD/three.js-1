@@ -22677,16 +22677,76 @@
 
 	var depthPeelingMainSuffixChunk = "#ifdef DEPTH_PEELING\nif (fragDepth == nearestDepth) {\n\tvec4 farColor = three_FragColor;\n\tvec4 nearColor = outFrontColor;\n\tfloat nearLinAlpha = lin(nearColor.a); \n\tfloat farLinAlpha = lin(farColor.a); \n\tfloat alphaMultiplier = 1.0 - nearLinAlpha;\n\toutFrontColor.rgb = nonLin(lin(farColor.rgb) * farLinAlpha * alphaMultiplier +\n\t\tlin(nearColor.rgb) * farLinAlpha);\n\toutFrontColor.a = nonLin(farLinAlpha * farLinAlpha * alphaMultiplier + nearLinAlpha);\n} else {\n\toutBackColor = three_FragColor;\n}\n#else\ngl_FragColor = three_FragColor;\t\n#endif";
 
+	var srcVertexShaderQuad = /* glsl */ `#version 300 es
+in vec4 inPosition;
+void main() {
+	gl_Position = inPosition;
+}
+`;
+
+	var srcFragmentShaderBlendBack = "#version 300 es\nprecision highp float;\nuniform sampler2D uBackColorBuffer;\nout vec4 fragColor;\nvoid main() {\n\tfragColor = texelFetch(uBackColorBuffer, ivec2(gl_FragCoord.xy), 0);\n\tif (fragColor.a == 0.0) {\n\t\tdiscard;\n\t}\n}";
+
+	var srcFragmentShaderFinal0 = /* glsl */ `#version 300 es
+precision highp float;
+uniform sampler2D frontColorIn;
+uniform sampler2D uBackColorBuffer;
+uniform int testMode;
+#define DEPTH_PEELING 1
+`;
+
+	var srcFragmentShaderFinal1 = /* glsl */ `
+out vec4 fragColor;
+void main() {
+	// Blend final, needs gamma correction
+	// See more complete description in peeling fragment shader
+
+	ivec2 fragCoord = ivec2(gl_FragCoord.xy);
+
+	if (testMode == 0) {
+		vec4 frontColor = texelFetch(frontColorIn, fragCoord, 0);
+		vec4 backColor = texelFetch(uBackColorBuffer, fragCoord, 0);
+	
+		float alphaMultiplier = 1.0 - lin(frontColor.a);
+	
+		vec3 color = nonLin(lin(frontColor.rgb) + alphaMultiplier * lin(backColor.rgb));
+	
+	
+		fragColor = vec4(
+			color,
+			nonLin(lin(frontColor.a) + lin(backColor.a))
+		);
+	} else if (testMode == 1) {
+		vec2 depth = texelFetch(frontColorIn, fragCoord.xy, 0).rg;
+		float farDepth = -depth.x;
+		float nearDepth = depth.y;
+
+		float thresh = 0.5;
+		float step = 0.25;
+		thresh += step; step *= 0.5;
+		thresh -= step; step *= 0.5;
+		thresh += step; step *= 0.5;
+		thresh -= step; step *= 0.5;
+		thresh += step; step *= 0.5;
+		thresh += step; step *= 0.5;
+		thresh += step; step *= 0.5;
+		thresh -= step; step *= 0.5;
+		
+		float r = (farDepth - thresh) * 1.0 + 0.5;
+		float g = (nearDepth - thresh) * 1.0 + 0.5;
+
+		fragColor = vec4(r, g, 0, 1);
+
+	} else {
+
+		fragColor = texelFetch(frontColorIn, fragCoord, 0);
+
+	}
+}
+`;
+
 	class WebGLDepthPeeling {
 
 		constructor(renderer, numDepthPeelingPasses) {
-			// Debugging options. See implementation for details.
-
-			// The following controls with buffers to render to the screen if _debugDrawBuffersDelay > 0
-			const _debugDrawBuffersDelay = 10;
-
-			// Sets an override maximum on the number of depth peeling passes in the loop
-			const _debugMaxDepthPeelingPasses = 2;
 
 			class ProgramData {
 
@@ -22727,7 +22787,6 @@
 					_blendBackTarget;
 
 			this.getNumDepthPeelingPasses = function () {
-				return _debugMaxDepthPeelingPasses;
 				return this.numDepthPeelingPasses;
 			};
 
@@ -22850,86 +22909,6 @@
 
 			this.setupShaders_ = function () {
 
-				var srcVertexShaderQuad = `#version 300 es
-			in vec4 inPosition;
-			void main() {
-				gl_Position = inPosition;
-			}
-		`;
-
-				var srcFragmentShaderBlendBack = `#version 300 es
-			precision highp float;
-			uniform sampler2D uBackColorBuffer;
-			
-			out vec4 fragColor;
-			void main() {
-			
-				// Blend back is using onboard blending, it has gamma correction
-				fragColor = texelFetch(uBackColorBuffer, ivec2(gl_FragCoord.xy), 0);
-
-				if (fragColor.a == 0.0) {
-					discard;
-				}
-			}
-		`;
-
-				var srcFragmentShaderFinal =
-`#version 300 es
-precision highp float;
-uniform sampler2D frontColorIn;
-uniform sampler2D uBackColorBuffer;
-uniform int testMode;
-
-#define DEPTH_PEELING 1
-`	 + gammaFuncs + `\n			
-out vec4 fragColor;
-void main() {
-	// Blend final, needs gamma correction
-	// See more complete description in peeling fragment shader
-
-	ivec2 fragCoord = ivec2(gl_FragCoord.xy);
-	if (testMode == 0) {
-		vec4 frontColor = texelFetch(frontColorIn, fragCoord, 0);
-		vec4 backColor = texelFetch(uBackColorBuffer, fragCoord, 0);
-	
-		float alphaMultiplier = 1.0 - lin(frontColor.a);
-	
-		vec3 color = nonLin(lin(frontColor.rgb) + alphaMultiplier * lin(backColor.rgb));
-	
-	
-		fragColor = vec4(
-			color,
-			nonLin(lin(frontColor.a) + lin(backColor.a))
-		);
-	} else if (testMode == 1) {
-		vec2 depth = texelFetch(frontColorIn, fragCoord.xy, 0).rg;
-		float farDepth = -depth.x;
-		float nearDepth = depth.y;
-
-		float thresh = 0.5;
-		float step = 0.25;
-		thresh += step; step *= 0.5;
-		thresh -= step; step *= 0.5;
-		thresh += step; step *= 0.5;
-		thresh -= step; step *= 0.5;
-		thresh += step; step *= 0.5;
-		thresh += step; step *= 0.5;
-		thresh += step; step *= 0.5;
-		thresh -= step; step *= 0.5;
-		
-		float r = (farDepth - thresh) * 1.0 + 0.5;
-		float g = (nearDepth - thresh) * 1.0 + 0.5;
-
-		fragColor = vec4(farDepth, nearDepth, 0, 1);
-
-	} else {
-
-		fragColor = texelFetch(frontColorIn, fragCoord, 0);
-
-	}
-}
-`;
-
 				function createShader( type, source, name ) {
 
 					var shader = _gl.createShader( type );
@@ -22971,6 +22950,8 @@ void main() {
 					srcVertexShaderQuad,
 					"vertexShaderQuad"
 				);
+
+				var srcFragmentShaderFinal = srcFragmentShaderFinal0 + gammaFuncs + srcFragmentShaderFinal1;
 				var finalFragmentShader = createShader(
 					35632,
 					srcFragmentShaderFinal,
@@ -23033,11 +23014,6 @@ void main() {
 			}
 
 			function resizeBuffer_ ( params ) {
-
-				console.log(`binding and sizing buffers.
-			texUnit     :` + params.texUnit +`
-			attachOffset:` + params.attachOffset +`
-			`);
 
 				_gl.activeTexture( 33984 + params.texUnit );
 				_gl.bindTexture( 3553, params.texture );
@@ -23288,123 +23264,11 @@ void main() {
 
 			}
 
-			function _drawDebugBufferToScreen( params) {
-				if (params.flagChanged)
-					console.warn(params.label);
-
-				_gl.bindFramebuffer(36160, null);
-				_gl.blendFunc(1, 771);
-
-				_gl.useProgram(_this.finPrgData.program);
-				_gl.uniform1i(_this.finPrgData.testModeLoc, params.testMode );
-				_gl.uniform1i(_this.finPrgData.frontColorInLoc, params.texUnit);
-
-				_drawInBufferToOutBuffer();
-			}
-
-			function _drawDepthBufferToScreen ( id, flagChanged ) {
-
-				var pingPongOffset = id * 3;
-				_drawDebugBufferToScreen({
-					flagChanged: flagChanged,
-					testMode: 1,
-					texUnit: pingPongOffset + _depthTexUnitOffset,
-					label:'testFlag: depth ' + (id == _readId ? 'read' : 'write')
-				} );
-
-			}
-
-			function _drawBackColorBufferToScreen(id, flagChanged ) {
-
-				var pingPongOffset = id * 3;
-				_drawDebugBufferToScreen({
-					flagChanged: flagChanged,
-					testMode: 2,
-					texUnit: pingPongOffset + _backColorTexUnitOffset,
-					label:'testFlag: back ' + (id == _readId ? 'read' : 'write')
-				} );
-
-			}
-			function _drawBlendBackBufferToScreen( flagChanged ) {
-
-				_drawDebugBufferToScreen( {
-					flagChanged: flagChanged,
-					testMode: 2,
-					texUnit: _blendBackTexUnit,
-					label:'testFlag: blendBack'
-				} );
-
-			}
 			this.endDrawLoop = function () {
-
-				/*
-				IT IS STRONGLY RECOMMENDED that you leave the debugging code in place. It took many days of trial and error to find
-				this method and getting it working. Without it you are programming in the dark.
-
-				This allows you to view each buffer during the render. It's about the only way to view and
-				debug the depth peeling process.
-
-				If a future node.js/Electron/chromium update allows reading 5126 using readPixels, it should be replaced with a
-				real frame dump to disk image.
-
-			 */
-
-				const testFlagNormal = 0;
-				const testFlagDrawFrontColor = 1;
-				const testFlagDrawBackColor = 2;
-				const testFlagDrawDepthBufferRead = 3;
-				const testFlagDrawDepthBufferWrite = 4;
-				const testFlagDrawBlendBackBuffer = 5;
-
-				const buffsToDraw = [
-					testFlagNormal,
-					testFlagDrawFrontColor,
-					testFlagDrawBackColor,
-					testFlagDrawDepthBufferRead,
-					testFlagDrawDepthBufferWrite,
-					testFlagDrawBlendBackBuffer
-				];
 
 				{
 
-					var flagChanged = false;
-					if (this.testIndex === undefined) {
-
-						this.tick = 0;
-						this.testIndex = 0;
-						flagChanged = true;
-
-					} else {
-
-						this.tick++;
-						if (this.tick > _debugDrawBuffersDelay) {
-
-							this.tick = 0;
-							this.testIndex++;
-							if (this.testIndex >= buffsToDraw.length) {
-
-								this.testIndex = 0;
-
-							}
-							flagChanged = true;
-
-						}
-
-					}
-
-					var testFlag = buffsToDraw[this.testIndex];
-					if (testFlag === testFlagNormal)
-						_blendFinal();
-					else if (testFlag === testFlagDrawFrontColor)
-						_drawDepthBufferToScreen( _writeId, flagChanged);
-					else if (testFlag === testFlagDrawBackColor)
-						_drawBackColorBufferToScreen(_writeId, flagChanged);
-					else if (testFlag === testFlagDrawDepthBufferRead)
-						_drawDepthBufferToScreen(_readId, flagChanged);
-					else if (testFlag === testFlagDrawDepthBufferWrite)
-						_drawDepthBufferToScreen(_writeId, flagChanged);
-					else if (testFlag === testFlagDrawBlendBackBuffer)
-						_drawBlendBackBufferToScreen(flagChanged);
+					_blendFinal();
 
 				}
 

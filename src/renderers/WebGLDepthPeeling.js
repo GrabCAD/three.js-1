@@ -1,7 +1,11 @@
-import depthPeelingPrefixChunk from './shaders/ShaderChunk/depth_peeling_prefix.glsl.js';
-import gammaFuncs from './shaders/ShaderChunk/depth_peeling_gamma_functions.glsl.js';
-import depthPeelingMainPrefixChunk from './shaders/ShaderChunk/depth_peeling_main_prefix.glsl.js';
-import depthPeelingMainSuffixChunk from './shaders/ShaderChunk/depth_peeling_main_suffix.glsl.js';
+import depthPeelingPrefixChunk from './shaders/ShaderChunk/depth_peeling_prefix.glsl';
+import gammaFuncs from './shaders/ShaderChunk/depth_peeling_gamma_functions.glsl';
+import depthPeelingMainPrefixChunk from './shaders/ShaderChunk/depth_peeling_main_prefix.glsl';
+import depthPeelingMainSuffixChunk from './shaders/ShaderChunk/depth_peeling_main_suffix.glsl';
+import srcVertexShaderQuad from './shaders/ShaderChunk/depth_peeling_quad_vertex_shader.glsl';
+import srcFragmentShaderBlendBack from './shaders/ShaderChunk/depth_peeling_fragment_blend_back.glsl';
+import srcFragmentShaderFinal0 from './shaders/ShaderChunk/depth_peeling_fragment_final_0.glsl';
+import srcFragmentShaderFinal1 from './shaders/ShaderChunk/depth_peeling_fragment_final_1.glsl';
 
 class WebGLDepthPeeling {
 
@@ -9,10 +13,10 @@ class WebGLDepthPeeling {
 		// Debugging options. See implementation for details.
 
 		// The following controls with buffers to render to the screen if _debugDrawBuffersDelay > 0
-		const _debugDrawBuffersDelay = 10;
+		const _debugDrawBuffersDelay = -1;
 
 		// Sets an override maximum on the number of depth peeling passes in the loop
-		const _debugMaxDepthPeelingPasses = 2;
+		const _debugMaxDepthPeelingPasses = -1;
 
 		class ProgramData {
 
@@ -43,7 +47,9 @@ class WebGLDepthPeeling {
 				_numQuadVertices,
 				_readId = 0,
 				_writeId = 1,
-				_dpPass = -1;
+				_dpPass = -1,
+				_testTick = 0,
+				_testIndex = 0;
 
 		var _depthBuffers,
 				_colorBuffers,
@@ -182,86 +188,6 @@ class WebGLDepthPeeling {
 
 		this.setupShaders_ = function () {
 
-			var srcVertexShaderQuad = `#version 300 es
-			in vec4 inPosition;
-			void main() {
-				gl_Position = inPosition;
-			}
-		`;
-
-			var srcFragmentShaderBlendBack = `#version 300 es
-			precision highp float;
-			uniform sampler2D uBackColorBuffer;
-			
-			out vec4 fragColor;
-			void main() {
-			
-				// Blend back is using onboard blending, it has gamma correction
-				fragColor = texelFetch(uBackColorBuffer, ivec2(gl_FragCoord.xy), 0);
-
-				if (fragColor.a == 0.0) {
-					discard;
-				}
-			}
-		`;
-
-			var srcFragmentShaderFinal =
-`#version 300 es
-precision highp float;
-uniform sampler2D frontColorIn;
-uniform sampler2D uBackColorBuffer;
-uniform int testMode;
-
-#define DEPTH_PEELING 1
-` + gammaFuncs + `\n			
-out vec4 fragColor;
-void main() {
-	// Blend final, needs gamma correction
-	// See more complete description in peeling fragment shader
-
-	ivec2 fragCoord = ivec2(gl_FragCoord.xy);
-	if (testMode == 0) {
-		vec4 frontColor = texelFetch(frontColorIn, fragCoord, 0);
-		vec4 backColor = texelFetch(uBackColorBuffer, fragCoord, 0);
-	
-		float alphaMultiplier = 1.0 - lin(frontColor.a);
-	
-		vec3 color = nonLin(lin(frontColor.rgb) + alphaMultiplier * lin(backColor.rgb));
-	
-	
-		fragColor = vec4(
-			color,
-			nonLin(lin(frontColor.a) + lin(backColor.a))
-		);
-	} else if (testMode == 1) {
-		vec2 depth = texelFetch(frontColorIn, fragCoord.xy, 0).rg;
-		float farDepth = -depth.x;
-		float nearDepth = depth.y;
-
-		float thresh = 0.5;
-		float step = 0.25;
-		thresh += step; step *= 0.5;
-		thresh -= step; step *= 0.5;
-		thresh += step; step *= 0.5;
-		thresh -= step; step *= 0.5;
-		thresh += step; step *= 0.5;
-		thresh += step; step *= 0.5;
-		thresh += step; step *= 0.5;
-		thresh -= step; step *= 0.5;
-		
-		float r = (farDepth - thresh) * 1.0 + 0.5;
-		float g = (nearDepth - thresh) * 1.0 + 0.5;
-
-		fragColor = vec4(farDepth, nearDepth, 0, 1);
-
-	} else {
-
-		fragColor = texelFetch(frontColorIn, fragCoord, 0);
-
-	}
-}
-`;
-
 			function createShader( type, source, name ) {
 
 				var shader = _gl.createShader( type );
@@ -303,6 +229,8 @@ void main() {
 				srcVertexShaderQuad,
 				"vertexShaderQuad"
 			);
+
+			var srcFragmentShaderFinal = srcFragmentShaderFinal0 + gammaFuncs + srcFragmentShaderFinal1;
 			var finalFragmentShader = createShader(
 				_gl.FRAGMENT_SHADER,
 				srcFragmentShaderFinal,
@@ -365,11 +293,6 @@ void main() {
 		}
 
 		function resizeBuffer_ ( params ) {
-
-			console.log(`binding and sizing buffers.
-			texUnit     :` + params.texUnit +`
-			attachOffset:` + params.attachOffset +`
-			`);
 
 			_gl.activeTexture( _gl.TEXTURE0 + params.texUnit );
 			_gl.bindTexture( _gl.TEXTURE_2D, params.texture );
@@ -698,16 +621,20 @@ void main() {
 		 */
 
 			const testFlagNormal = 0;
-			const testFlagDrawFrontColor = 1;
-			const testFlagDrawBackColor = 2;
-			const testFlagDrawDepthBufferRead = 3;
-			const testFlagDrawDepthBufferWrite = 4;
-			const testFlagDrawBlendBackBuffer = 5;
+			const testFlagDrawFrontColorRead = 1;
+			const testFlagDrawFrontColorWrite = 2;
+			const testFlagDrawBackColorRead = 3;
+			const testFlagDrawBackColorWrite = 4;
+			const testFlagDrawDepthBufferRead = 5;
+			const testFlagDrawDepthBufferWrite = 6;
+			const testFlagDrawBlendBackBuffer = 7;
 
 			const buffsToDraw = [
 				testFlagNormal,
-				testFlagDrawFrontColor,
-				testFlagDrawBackColor,
+				testFlagDrawFrontColorRead,
+				testFlagDrawFrontColorWrite,
+				testFlagDrawBackColorRead,
+				testFlagDrawBackColorWrite,
 				testFlagDrawDepthBufferRead,
 				testFlagDrawDepthBufferWrite,
 				testFlagDrawBlendBackBuffer
@@ -720,22 +647,22 @@ void main() {
 			} else {
 
 				var flagChanged = false;
-				if (this.testIndex === undefined) {
+				if (_testIndex === undefined) {
 
-					this.tick = 0;
-					this.testIndex = 0;
+					_testTick = 0;
+					_testIndex = 0;
 					flagChanged = true;
 
 				} else {
 
-					this.tick++;
-					if (this.tick > _debugDrawBuffersDelay) {
+					_testTick++;
+					if (_testTick > _debugDrawBuffersDelay) {
 
-						this.tick = 0;
-						this.testIndex++;
-						if (this.testIndex >= buffsToDraw.length) {
+						_testTick = 0;
+						_testIndex++;
+						if (_testIndex >= buffsToDraw.length) {
 
-							this.testIndex = 0;
+							_testIndex = 0;
 
 						}
 						flagChanged = true;
@@ -744,12 +671,20 @@ void main() {
 
 				}
 
-				var testFlag = buffsToDraw[this.testIndex];
-				if (testFlag === testFlagNormal)
+				var testFlag = buffsToDraw[_testIndex];
+				if (testFlag === testFlagNormal) {
+
+					if (flagChanged)
+						console.warn('testFlag: normal');
 					_blendFinal();
-				else if (testFlag === testFlagDrawFrontColor)
-					_drawDepthBufferToScreen( _writeId, flagChanged);
-				else if (testFlag === testFlagDrawBackColor)
+
+				} else if (testFlag === testFlagDrawFrontColorRead)
+					drawFrontColorBufferToScreen(_readId, flagChanged);
+				else if (testFlag === testFlagDrawFrontColorWrite)
+					drawFrontColorBufferToScreen(_writeId, flagChanged);
+				else if (testFlag === testFlagDrawBackColorRead)
+					_drawBackColorBufferToScreen(_readId, flagChanged);
+				else if (testFlag === testFlagDrawBackColorWrite)
 					_drawBackColorBufferToScreen(_writeId, flagChanged);
 				else if (testFlag === testFlagDrawDepthBufferRead)
 					_drawDepthBufferToScreen(_readId, flagChanged);
