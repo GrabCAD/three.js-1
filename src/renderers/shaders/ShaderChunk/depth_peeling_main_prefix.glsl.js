@@ -3,20 +3,7 @@ export default /* glsl */`
 #ifdef DEPTH_PEELING
 
 float fragDepth = gl_FragCoord.z;   // 0 - 1
-/*
-float thresh = 0.5;
-float step = 0.25;
-thresh += step; step *= 0.5;
-thresh -= step; step *= 0.5;
-thresh += step; step *= 0.5;
-thresh -= step; step *= 0.5;
-thresh += step; step *= 0.5;
-thresh += step; step *= 0.5;
-thresh += step; step *= 0.5;
-thresh -= step; step *= 0.5;
 
-float fragColor = (fragDepth - thresh) * -255.0 + 0.5;
-*/
 ivec2 fragCoord = ivec2(gl_FragCoord.xy);
 vec2 lastDepth = texelFetch(depthBufferIn, fragCoord, 0).rg;
 outFrontColor = texelFetch(frontColorIn, fragCoord, 0);

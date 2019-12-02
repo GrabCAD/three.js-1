@@ -761,12 +761,7 @@ function WebGLRenderer( parameters ) {
 		state.setMaterial( material, frontFaceCW );
 
 		var program = setProgram( camera, fog, material, object );
-
-		if ( program && program.program ) {
-
-			_this.depthPeelingData.bindBuffersForDraw_( program.program );
-
-		}
+		_this.depthPeelingData.bindBuffersForDraw( program );
 
 		var updateBuffers = false;
 
@@ -1271,7 +1266,7 @@ function WebGLRenderer( parameters ) {
 
 				var drawBuffersDebug = false;
 				if (!drawBuffersDebug) {
-					dpd.blendFinal_( gl, dpd.writeId );
+					dpd.blendFinal( gl );
 				} else {
 					const testFlagNormal = 0;
 					const testFlagDrawFrontColor = 1;
@@ -1304,7 +1299,7 @@ function WebGLRenderer( parameters ) {
 
 					var testFlag = buffsToDraw[this.testIndex];
 					if (testFlag === testFlagNormal)
-						dpd.blendFinal_(gl, dpd.writeId);
+						dpd.blendFinal( gl );
 					else if (testFlag === testFlagDrawFrontColor)
 						dpd.drawFrontColorBufferToScreen_(gl, dpd.writeId, flagChanged);
 					else if (testFlag === testFlagDrawBackColor)
@@ -1574,12 +1569,7 @@ function WebGLRenderer( parameters ) {
 			state.setMaterial( material );
 
 			var program = setProgram( camera, scene.fog, material, object );
-
-			if ( program && program.program ) {
-
-				_this.depthPeelingData.bindBuffersForDraw_( program.program );
-
-			}
+			_this.depthPeelingData.bindBuffersForDraw( program );
 
 			_currentGeometryProgram.geometry = null;
 			_currentGeometryProgram.program = null;
