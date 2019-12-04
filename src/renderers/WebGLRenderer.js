@@ -130,12 +130,7 @@ function WebGLRenderer( parameters ) {
 	this.autoClearStencil = true;
 
 	// scene graph
-	this.depthPeelingData = new WebGLDepthPeeling(this, 10);
-	this.sortObjects = this.depthPeelingData.getNumDepthPeelingPasses() === 0;
-
-	this.getDepthPeelingData = function () {
-		return this.depthPeelingData;
-	}
+	this.sortObjects = true;
 
 	// user-defined clipping
 
@@ -344,6 +339,13 @@ function WebGLRenderer( parameters ) {
 	}
 
 	initGLContext();
+
+	this.depthPeelingData = new WebGLDepthPeeling(this, 10);
+	this.sortObjects = this.depthPeelingData.getNumDepthPeelingPasses() === 0;
+
+	this.getDepthPeelingData = function () {
+		return this.depthPeelingData;
+	}
 
 	// vr
 

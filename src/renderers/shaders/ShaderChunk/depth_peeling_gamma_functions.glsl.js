@@ -8,7 +8,7 @@ export default /* glsl */`
 // but we're not using the card. So, we do our own gamma correction. See 
 // https://blog.johnnovak.net/2016/09/21/what-every-coder-should-know-about-gamma/
 
-#if 0
+#if 1
 // This definitely seems the correct approach, the other option is retained for future comparison if anyone
 // else wants to test it.
 // gamma corrected

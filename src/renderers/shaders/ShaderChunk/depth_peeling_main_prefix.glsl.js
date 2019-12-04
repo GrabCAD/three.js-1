@@ -3,6 +3,11 @@ export default /* glsl */`
 #ifdef DEPTH_PEELING
 
 float fragDepth = gl_FragCoord.z;   // 0 - 1
+/*
+float fragScale = float(0x10000);
+int iFragDepth = int(fragDepth * fragScale);
+fragDepth = float(iFragDepth) / fragScale;
+*/
 
 ivec2 fragCoord = ivec2(gl_FragCoord.xy);
 vec2 lastDepth = texelFetch(depthBufferIn, fragCoord, 0).rg;

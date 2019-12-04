@@ -1,3 +1,4 @@
+import { WebGLErrorReporter } from './webgl/WebGLErrorReporter';
 import depthPeelingPrefixChunk from './shaders/ShaderChunk/depth_peeling_prefix.glsl';
 import gammaFuncs from './shaders/ShaderChunk/depth_peeling_gamma_functions.glsl';
 import depthPeelingMainPrefixChunk from './shaders/ShaderChunk/depth_peeling_main_prefix.glsl';
@@ -40,9 +41,10 @@ class WebGLDepthPeeling {
 					_backColorTexUnitOffset = 2,
 					_blendBackTexUnit = 6;
 
+		const doErrorChecks = false;
 		var _this = this,
 				_renderer = renderer,
-		 		_gl, // Can't initialize this until later in the process, but need to declare it here.
+		 		_gl = doErrorChecks ? new WebGLErrorReporter( renderer.context ) : renderer.context,
 				_quadBuffer,
 				_numQuadVertices,
 				_readId = 0,
@@ -60,7 +62,7 @@ class WebGLDepthPeeling {
 				_blendBackTarget;
 
 		this.getNumDepthPeelingPasses = function () {
-			if (_debugMaxDepthPeelingPasses > 1)
+			if ( _debugMaxDepthPeelingPasses > 0 && _debugMaxDepthPeelingPasses < this.numDepthPeelingPasses )
 				return _debugMaxDepthPeelingPasses;
 			return this.numDepthPeelingPasses;
 		};
@@ -164,26 +166,40 @@ class WebGLDepthPeeling {
 
 		};
 
-		function _initBuffers() {
+		function loadRequiredExtensions () {
+
+			// BUG, workaround.
+			// Shouldn't need this, but the version of WebGL2 being used by electron doesn't have built in float textures
+			// as per the spec. Three.js reports that it does.
+			var ext1 = _gl.getExtension( "EXT_color_buffer_float" );
+			if (!ext1)
+				console.warn('EXT_color_buffer_float: not available');
+
+		}
+
+		function initBuffers() {
 
 			if ( _this.initialized )
 				return;
 
-			if ( _gl === undefined )
-				_gl = _renderer.context;
-
-			_gl.getExtension( "EXT_color_buffer_float" );
+			loadRequiredExtensions();
 
 			_createBuffers();
 			_this.setupShaders_();
 			_this.initialized = true;
 
-		};
+		}
 
 		this.beginDrawLoop = function ( camera ) {
 
-			_initBuffers();
-			this.resizeBuffers( _gl.drawingBufferWidth, _gl.drawingBufferHeight );
+			initBuffers();
+
+			// Special handling of the error wrapper
+			var realGl = _gl;
+			if ( _gl.gl )
+				realGl = _gl.gl;
+
+			this.resizeBuffers( realGl.drawingBufferWidth, realGl.drawingBufferHeight );
 		};
 
 		this.setupShaders_ = function () {
@@ -255,14 +271,15 @@ class WebGLDepthPeeling {
 
 		};
 
-		function checkBufferSize_ ( width, height ) {
-			if ( !_this.initialized ) return false;
+		function needToResizeBuffers ( width, height ) {
+			if ( !_this.initialized )
+				return false; // Can't resize
 
 			if (_this.bufferSize &&
 				_this.bufferSize.width === width &&
 				_this.bufferSize.height === height ) {
 				// already resized
-				return true;
+				return false;
 			}
 
 			if (width === -1 && height === -1) {
@@ -271,7 +288,7 @@ class WebGLDepthPeeling {
 					height = _this.bufferSize.height;
 				} else {
 					console.error('Width and height not set');
-					return false;
+					return false; // Can't resize
 				}
 			}
 
@@ -280,7 +297,7 @@ class WebGLDepthPeeling {
 				(width < arbitraryMinBufferSize && height < arbitraryMinBufferSize)) {
 				// Test for an arbitrarily small buffer
 				console.warn('WebGLDepthPeeling.resizeBuffers_ called with bad sizes');
-				return false;
+				return false; // Can't resize
 			}
 
 			_this.bufferSize = {
@@ -288,11 +305,43 @@ class WebGLDepthPeeling {
 				height: height
 			};
 
-			return true;
+			return true; // Must resize
+
+		}
+
+		function populateParams ( params ) {
+
+			// Once an internal format is chosen, there is a table that determines the choice(es) for
+			// the format and type. The table is located at
+			// https://www.khronos.org/registry/webgl/specs/latest/2.0/#TEXTURE_TYPES_FORMATS_FROM_DOM_ELEMENTS_TABLE
+			// This code assures that types are in agreement.
+
+			if (params.internalFormat === _gl.RG32F ) {
+				params.format = _gl.RG;
+				params.type = _gl.FLOAT;
+			} else if (params.internalFormat === _gl.RGBA16F ) {
+				params.format = _gl.RGBA;
+				params.type = _gl.HALF_FLOAT;
+			} else if (params.internalFormat === _gl.RGBA32F ) {
+				params.format = _gl.RGBA;
+				params.type = _gl.FLOAT;
+			} else if (params.internalFormat === _gl.RGBA ) {
+				params.format = _gl.RGBA;
+				params.type = _gl.UNSIGNED_BYTE;
+			}
+
+			return params;
 
 		}
 
 		function resizeBuffer_ ( params ) {
+
+			if ( _this.bufferSize.width < 2 || _this.bufferSize.height < 2 ) {
+				console.error('Texture too small');
+				return;
+			}
+
+			params = populateParams( params );
 
 			_gl.activeTexture( _gl.TEXTURE0 + params.texUnit );
 			_gl.bindTexture( _gl.TEXTURE_2D, params.texture );
@@ -300,6 +349,7 @@ class WebGLDepthPeeling {
 			_gl.texParameteri( _gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, _gl.NEAREST );
 			_gl.texParameteri( _gl.TEXTURE_2D, _gl.TEXTURE_WRAP_S, _gl.CLAMP_TO_EDGE );
 			_gl.texParameteri( _gl.TEXTURE_2D, _gl.TEXTURE_WRAP_T, _gl.CLAMP_TO_EDGE );
+
 			_gl.texImage2D(
 				_gl.TEXTURE_2D,
 				0,
@@ -318,25 +368,18 @@ class WebGLDepthPeeling {
 				params.texture,
 				0
 			);
-
 		}
 
 		function resizeDepthBuffer_ ( texOffset, attachOffset, texture ) {
 			// The _gl version of these constants cause warnings in npm run build.
 			// Define our own locally to avoid this.
 
-			var RG32F = 0x8230;
-			var RG = 0x8227;
-
 			resizeBuffer_( {
 				texUnit: texOffset + attachOffset,
 				attachOffset: attachOffset,
 				texture: texture,
-				internalFormat: RG32F,
-				format: RG,
-				type: _gl.FLOAT
+				internalFormat: _gl.RG32F
 			} );
-
 		}
 
 		function resizeColorBuffer_ ( texOffset, attachOffset, texture) {
@@ -344,9 +387,7 @@ class WebGLDepthPeeling {
 				texUnit: texOffset + attachOffset,
 				texture: texture,
 				attachOffset: attachOffset,
-				internalFormat: _gl.RGBA16F,
-				format: _gl.RGBA,
-				type: _gl.HALF_FLOAT
+				internalFormat: _gl.RGBA16F
 			} );
 
 		}
@@ -360,14 +401,35 @@ class WebGLDepthPeeling {
 
 		}
 
+		function checkFrameBuffer () {
+
+			var status = _gl.checkFramebufferStatus( _gl.FRAMEBUFFER );
+
+			if ( status !== _gl.FRAMEBUFFER_COMPLETE ) {
+				if ( status === _gl.FRAMEBUFFER_INCOMPLETE_ATTACHMENT )
+					console.warn( 'FRAMEBUFFER_INCOMPLETE_ATTACHMENT' );
+				else if ( status === _gl.FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT )
+					console.warn( 'FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT' );
+				else if ( status === _gl.FRAMEBUFFER_INCOMPLETE_DIMENSIONS )
+					console.warn( 'FRAMEBUFFER_INCOMPLETE_DIMENSIONS' );
+				else if ( status === _gl.FRAMEBUFFER_UNSUPPORTED )
+					console.warn( 'FRAMEBUFFER_UNSUPPORTED' );
+				else if ( status === _gl.FRAMEBUFFER_INCOMPLETE_MULTISAMPLE )
+					console.warn( 'FRAMEBUFFER_INCOMPLETE_MULTISAMPLE' );
+			}
+
+		}
+
 		function resizeDepthBuffers_ ( pingPongIndex ) {
 
 			var texOffset = pingPongIndex * 3;
 
 			_gl.bindFramebuffer( _gl.FRAMEBUFFER, _depthBuffers[ pingPongIndex ] );
 			resizeDepthBuffer_( texOffset, _depthTexUnitOffset, _depthTarget[ pingPongIndex ] );
-			resizeColorBuffer_( texOffset, 1, _frontColorTarget[ pingPongIndex ] );
-			resizeColorBuffer_( texOffset, 2, _backColorTarget[ pingPongIndex ] );
+			resizeColorBuffer_( texOffset, _frontColorTexUnitOffset, _frontColorTarget[ pingPongIndex ] );
+			resizeColorBuffer_( texOffset, _backColorTexUnitOffset, _backColorTarget[ pingPongIndex ] );
+
+			checkFrameBuffer();
 
 			_gl.bindFramebuffer( _gl.FRAMEBUFFER, null );
 
@@ -380,10 +442,10 @@ class WebGLDepthPeeling {
 				texUnit: 6,
 				texture: _blendBackTarget,
 				attachOffset: 0,
-				internalFormat: _gl.RGBA16F,
-				format: _gl.RGBA,
-				type: _gl.HALF_FLOAT
+				internalFormat: _gl.RGBA16F
 			} );
+
+			checkFrameBuffer();
 
 			_gl.bindFramebuffer( _gl.FRAMEBUFFER, null );
 
@@ -391,7 +453,7 @@ class WebGLDepthPeeling {
 
 		this.resizeBuffers = function ( width, height ) {
 
-			if ( checkBufferSize_(width, height) ) {
+			if ( needToResizeBuffers(width, height) ) {
 
 				resizeDepthBuffers_( 0 );
 				bindColorBuffers_  ( 0 );
@@ -407,7 +469,7 @@ class WebGLDepthPeeling {
 
 		};
 
-		function initializeBuffersForPass_() {
+		function bindDepthBufferTextures() {
 
 			_gl.activeTexture(_gl.TEXTURE0 + 0 + _depthTexUnitOffset);
 			_gl.bindTexture(_gl.TEXTURE_2D, _depthTarget[0]);
@@ -447,6 +509,7 @@ class WebGLDepthPeeling {
 			_gl.clear(_gl.COLOR_BUFFER_BIT);
 
 			if (init) {
+
 				_gl.bindFramebuffer(_gl.DRAW_FRAMEBUFFER, _depthBuffers[_readId]);
 				_gl.clearColor(-MIN_DEPTH_, MAX_DEPTH_, 0, 0);
 				_gl.clear(_gl.COLOR_BUFFER_BIT);
@@ -466,7 +529,7 @@ class WebGLDepthPeeling {
 			this.passNum = passNum;
 			_readId = passNum % 2;
 			_writeId = 1 - _readId;
-			initializeBuffersForPass_();
+			bindDepthBufferTextures();
 			clearBuffersForDraw_(passNum === 0);
 		};
 
@@ -497,6 +560,9 @@ class WebGLDepthPeeling {
 
 				_gl.uniform1i( depthBufferInLoc, offsetRead );
 				_gl.uniform1i( frontColorInLoc, offsetRead + _frontColorTexUnitOffset ); // Read from front color
+
+				checkFrameBuffer();
+
 			}
 
 		};
@@ -507,7 +573,8 @@ class WebGLDepthPeeling {
 			_gl.bindFramebuffer( _gl.DRAW_FRAMEBUFFER, _blendBackBuffer );
 			_gl.drawBuffers( [ _gl.COLOR_ATTACHMENT0 ] );
 			_gl.blendEquation( _gl.FUNC_ADD );
-			_gl.blendFuncSeparate( _gl.SRC_ALPHA, _gl.ONE_MINUS_SRC_ALPHA, _gl.ONE, _gl.ONE_MINUS_SRC_ALPHA );
+			_gl.blendFuncSeparate( _gl.SRC_ALPHA, _gl.ONE_MINUS_SRC_ALPHA, _gl.ONE, _gl.ONE_MINUS_SRC_ALPHA );/*
+
 /*
 			// buffer testing. This test passes also, the screen background turns blue
 			_gl.clearColor(0, 0, 1, 0.5);
