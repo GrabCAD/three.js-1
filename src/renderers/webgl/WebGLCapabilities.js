@@ -1,3 +1,5 @@
+import { WebGLErrorReporter } from './WebGLErrorReporter';
+
 /**
  * @author mrdoob / http://mrdoob.com/
  */
@@ -56,7 +58,8 @@ function WebGLCapabilities( gl, extensions, parameters ) {
 
 	}
 
-	var isWebGL2 = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
+	var isWebGL2 = typeof WebGL2RenderingContext !== 'undefined' &&
+		(( gl instanceof WebGLErrorReporter ) ? gl.gl instanceof WebGL2RenderingContext : gl instanceof WebGL2RenderingContext );
 
 	var precision = parameters.precision !== undefined ? parameters.precision : 'highp';
 	var maxPrecision = getMaxPrecision( precision );

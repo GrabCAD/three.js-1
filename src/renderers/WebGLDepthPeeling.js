@@ -36,22 +36,24 @@ class WebGLDepthPeeling {
 		this.depthPeelingRender = true; // internal flag used to control type of render
 		this.numDepthPeelingPasses = numDepthPeelingPasses;
 
-		const _depthTexUnitOffset = 0,
-					_frontColorTexUnitOffset = 1,
-					_backColorTexUnitOffset = 2,
-					_blendBackTexUnit = 6;
+		const
+			_depthTexUnitOffset = 0,
+			_frontColorTexUnitOffset = 1,
+			_backColorTexUnitOffset = 2,
+			_blendBackTexUnit = 6;
 
-		const doErrorChecks = false;
-		var _this = this,
-				_renderer = renderer,
-		 		_gl = doErrorChecks ? new WebGLErrorReporter( renderer.context ) : renderer.context,
-				_quadBuffer,
-				_numQuadVertices,
-				_readId = 0,
-				_writeId = 1,
-				_dpPass = -1,
-				_testTick = 0,
-				_testIndex = 0;
+		var
+			_this = this,
+			_renderer = renderer,
+			_gl = renderer.context,
+			_state = renderer.state,
+			_quadBuffer,
+			_numQuadVertices,
+			_readId = 0,
+			_writeId = 1,
+			_dpPass = -1,
+			_testTick = 0,
+			_testIndex = 0;
 
 		var _depthBuffers,
 				_colorBuffers,
@@ -114,12 +116,6 @@ class WebGLDepthPeeling {
 				'gl_FragColor = three_FragColor;';
 			fragmentGlsl = fragmentGlsl.substring(0 , fragmentGlsl.length - 1);
 			fragmentGlsl = fragmentGlsl + '\n' + fragmentGlslSuffix + '\n}';
-
-/*
-			 if ( depthPeelingEnabled ) {
-			 console.warn("***************************fragmentGlsl:\n" + fragmentGlsl + '\n***************************\n')
-			 }
-*/
 
 			return fragmentGlsl;
 		};
@@ -190,16 +186,13 @@ class WebGLDepthPeeling {
 
 		}
 
-		this.beginDrawLoop = function ( camera ) {
+		this.beginDrawLoop = function ( ) {
 
 			initBuffers();
 
 			// Special handling of the error wrapper
-			var realGl = _gl;
-			if ( _gl.gl )
-				realGl = _gl.gl;
-
-			this.resizeBuffers( realGl.drawingBufferWidth, realGl.drawingBufferHeight );
+			var rawGl = ( _gl instanceof WebGLErrorReporter ) ? _gl.gl : _gl;
+			this.resizeBuffers( rawGl.drawingBufferWidth, rawGl.drawingBufferHeight );
 		};
 
 		this.setupShaders_ = function () {
@@ -535,8 +528,7 @@ class WebGLDepthPeeling {
 
 		this.bindBuffersForDraw = function ( tjsProgram ) {
 
-			if (tjsProgram && tjsProgram.program && this.isDepthPeelingOn()) {
-				var program = tjsProgram.program;
+			if ( this.isDepthPeelingOn() ) {
 
 /*
 				// Clear input color buffer test - passes. This test changes the color of the next pass
@@ -546,7 +538,37 @@ class WebGLDepthPeeling {
 				_gl.clear(_gl.COLOR_BUFFER_BIT);
 */
 
+				_gl.bindFramebuffer( _gl.DRAW_FRAMEBUFFER, _depthBuffers[ _writeId ] );
+				_gl.drawBuffers( [ _gl.COLOR_ATTACHMENT0, _gl.COLOR_ATTACHMENT0 + 1, _gl.COLOR_ATTACHMENT0 + 2 ] );
+				_gl.blendEquation( _gl.MAX );
+				_gl.enable( _gl.BLEND );
+				_gl.disable( _gl.DEPTH_TEST );
+				_gl.enable( _gl.CULL_FACE );
+				checkFrameBuffer();
+
+				var program = _state.getCurrentProgram();
+				var depthBufferInLoc = _gl.getUniformLocation(program, "depthBufferIn");
+				var frontColorInLoc = _gl.getUniformLocation(program, "frontColorIn");
+
 				var offsetRead = 3 * _readId;
+				_gl.uniform1i( depthBufferInLoc, offsetRead );
+				_gl.uniform1i( frontColorInLoc, offsetRead + _frontColorTexUnitOffset ); // Read from front color
+
+			}
+
+		};
+
+		this.bindBuffersForDraw = function ( tjsProgram ) {
+
+			if (this.isDepthPeelingOn()) {
+
+				/*
+				 // Clear input color buffer test - passes. This test changes the color of the next pass
+				 _gl.bindFramebuffer(_gl.DRAW_FRAMEBUFFER, _colorBuffers[_readId]);
+				 _gl.drawBuffers([_gl.COLOR_ATTACHMENT0, _gl.COLOR_ATTACHMENT0 + 1]);
+				 _gl.clearColor(0, 1, 0, 0.5);
+				 _gl.clear(_gl.COLOR_BUFFER_BIT);
+				 */
 
 				_gl.bindFramebuffer( _gl.DRAW_FRAMEBUFFER, _depthBuffers[ _writeId ] );
 				_gl.drawBuffers( [ _gl.COLOR_ATTACHMENT0, _gl.COLOR_ATTACHMENT0 + 1, _gl.COLOR_ATTACHMENT0 + 2 ] );
@@ -554,42 +576,73 @@ class WebGLDepthPeeling {
 				_gl.enable( _gl.BLEND );
 				_gl.disable( _gl.DEPTH_TEST );
 				_gl.enable( _gl.CULL_FACE );
+				checkFrameBuffer();
 
+				var program = _state.getCurrentProgram();
 				var depthBufferInLoc = _gl.getUniformLocation(program, "depthBufferIn");
 				var frontColorInLoc = _gl.getUniformLocation(program, "frontColorIn");
 
+				var offsetRead = 3 * _readId;
 				_gl.uniform1i( depthBufferInLoc, offsetRead );
 				_gl.uniform1i( frontColorInLoc, offsetRead + _frontColorTexUnitOffset ); // Read from front color
-
-				checkFrameBuffer();
 
 			}
 
 		};
 
+		// gross overkill, as we should never have more than one
+		var _currentProgramStack = [];
+
+		function pushCurrentProgram () {
+
+			_currentProgramStack.push( _renderer.state.getCurrentProgram() );
+
+		}
+
+		function popCurrentProgram () {
+
+			if ( _currentProgramStack.length > 0) {
+				_gl.useProgram( _currentProgramStack[_currentProgramStack.length - 1 ] );
+				_currentProgramStack.pop();
+
+			}
+
+		}
+
 		this.endPass = function () {
 
-			var offsetBack = _writeId * 3;
-			_gl.bindFramebuffer( _gl.DRAW_FRAMEBUFFER, _blendBackBuffer );
-			_gl.drawBuffers( [ _gl.COLOR_ATTACHMENT0 ] );
-			_gl.blendEquation( _gl.FUNC_ADD );
-			_gl.blendFuncSeparate( _gl.SRC_ALPHA, _gl.ONE_MINUS_SRC_ALPHA, _gl.ONE, _gl.ONE_MINUS_SRC_ALPHA );/*
+			pushCurrentProgram();
 
-/*
-			// buffer testing. This test passes also, the screen background turns blue
-			_gl.clearColor(0, 0, 1, 0.5);
-			_gl.clear(_gl.COLOR_BUFFER_BIT);
-*/
+			try {
 
-			_gl.useProgram( this.blBackPrgData.program );
-			_gl.uniform1i( this.blBackPrgData.uBackColorBuffer, offsetBack + _backColorTexUnitOffset );
+				var offsetBack = _writeId * 3;
+				_gl.bindFramebuffer( _gl.DRAW_FRAMEBUFFER, _blendBackBuffer );
+				_gl.drawBuffers( [ _gl.COLOR_ATTACHMENT0 ] );
+				_gl.blendEquation( _gl.FUNC_ADD );
+				_gl.blendFuncSeparate( _gl.SRC_ALPHA, _gl.ONE_MINUS_SRC_ALPHA, _gl.ONE, _gl.ONE_MINUS_SRC_ALPHA );/*
 
-			_drawInBufferToOutBuffer();
+	/*
+				// buffer testing. This test passes also, the screen background turns blue
+				_gl.clearColor(0, 0, 1, 0.5);
+				_gl.clear(_gl.COLOR_BUFFER_BIT);
+	*/
+
+				_gl.useProgram( this.blBackPrgData.program );
+				_gl.uniform1i( this.blBackPrgData.uBackColorBuffer, offsetBack + _backColorTexUnitOffset );
+
+				_drawInBufferToOutBuffer();
+
+			} catch (err) {
+				console.error( err );
+			}
+
+			popCurrentProgram( );
 
 		};
 
 		function _blendFinal() {
-/*
+
+			/*
 			 // buffer testing
 			 _gl.bindFramebuffer(_gl.DRAW_FRAMEBUFFER, _colorBuffers[_writeId]);
 			 _gl.clearColor(1, 0, 0, 0.5);
@@ -598,7 +651,8 @@ class WebGLDepthPeeling {
 			 _gl.bindFramebuffer(_gl.DRAW_FRAMEBUFFER, _blendBackBuffer);
 			 _gl.clearColor(0, 1, 0, 0.5);
 			 _gl.clear(_gl.COLOR_BUFFER_BIT);
-*/
+			 */
+
 			var pingPongOffset = _writeId * 3;
 			_gl.bindFramebuffer(_gl.FRAMEBUFFER, null);
 			_gl.blendFunc(_gl.ONE, _gl.ONE_MINUS_SRC_ALPHA);
@@ -673,19 +727,23 @@ class WebGLDepthPeeling {
 
 		};
 
-		this.endDrawLoop = function () {
+		function endDrawLoopInner () {
 
 			/*
-			IT IS STRONGLY RECOMMENDED that you leave the debugging code in place. It took many days of trial and error to find
-			this method and getting it working. Without it you are programming in the dark.
+			 IT IS STRONGLY RECOMMENDED that you leave the debugging code in place. It took many days of trial and error to find
+			 this method and getting it working. Without it you are programming in the dark.
 
-			This allows you to view each buffer during the render. It's about the only way to view and
-			debug the depth peeling process.
+			 This allows you to view each buffer during the render. It's about the only way to view and
+			 debug the depth peeling process.
 
-			If a future node.js/Electron/chromium update allows reading gl.FLOAT using readPixels, it should be replaced with a
-			real frame dump to disk image.
+			 If a future node.js/Electron/chromium update allows reading gl.FLOAT using readPixels, it should be replaced with a
+			 real frame dump to disk image.
 
-		 */
+			 */
+
+			// Depth peeling makes use of two non-standard, fixed programs that SHOULD NOT be logged as
+			// the current program with WebGLState.
+			// So, we push the current program and pop it on exit.
 
 			const testFlagNormal = 0;
 			const testFlagDrawFrontColorRead = 1;
@@ -761,6 +819,21 @@ class WebGLDepthPeeling {
 					_drawBlendBackBufferToScreen(flagChanged);
 
 			}
+		}
+
+		this.endDrawLoop = function () {
+
+			pushCurrentProgram();
+
+			try {
+
+				endDrawLoopInner();
+
+			} catch ( err ) {
+				console.error( err );
+			}
+
+			popCurrentProgram();
 
 		};
 

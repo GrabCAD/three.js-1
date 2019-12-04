@@ -43,6 +43,7 @@ import { WebGLUniforms } from './webgl/WebGLUniforms.js';
 import { WebGLUtils } from './webgl/WebGLUtils.js';
 import { WebVRManager } from './webvr/WebVRManager.js';
 import { WebXRManager } from './webvr/WebXRManager.js';
+import { WebGLErrorReporter } from './webgl/WebGLErrorReporter';
 import { WebGLDepthPeeling } from './WebGLDepthPeeling.js';
 
 /**
@@ -100,6 +101,9 @@ class GLRestoreState {
 function WebGLRenderer( parameters ) {
 
 	console.log( 'THREE.WebGLRenderer', REVISION );
+
+	// Turns on universal calling of gl.getError() after each gl function call
+	const useGlDebugging = false;
 
 	parameters = parameters || {};
 
@@ -241,7 +245,9 @@ function WebGLRenderer( parameters ) {
 		_canvas.addEventListener( 'webglcontextlost', onContextLost, false );
 		_canvas.addEventListener( 'webglcontextrestored', onContextRestore, false );
 
-		_gl = _context || _canvas.getContext( 'webgl', contextAttributes ) || _canvas.getContext( 'experimental-webgl', contextAttributes );
+		var locGl = _context || _canvas.getContext( 'webgl', contextAttributes ) || _canvas.getContext( 'experimental-webgl', contextAttributes );
+
+		_gl = useGlDebugging ? new WebGLErrorReporter( locGl ) : locGl;
 
 		if ( _gl === null ) {
 
@@ -1133,24 +1139,25 @@ function WebGLRenderer( parameters ) {
 
 	// Rendering
 
-	this.render = function ( scene, camera, depthPeelingRender ) {
+	this.render = function ( scene, camera, depthPeelingRenderParam ) {
 		var dpd = this.depthPeelingData;
 
 		// Not all renders should use depth peeline, such as composite overlays
 		// This flag sets this state for this call
 		var renderTarget, forceClear;
 
+		var depthPeelingRender = false;
 		if ( arguments[ 2 ] !== undefined) {
 
 			if ( typeof( arguments[ 2 ] ) === 'WebGLRenderTarget') {
 
 				console.warn( 'THREE.WebGLRenderer.render(): the renderTarget argument has been removed. Use .setRenderTarget() instead.' );
 				renderTarget = arguments[ 2 ];
-				dpd.depthPeelingRender = true;
+				depthPeelingRender = true;
 
 			} else {
 
-				dpd.depthPeelingRender = arguments[ 2 ];
+				depthPeelingRender = depthPeelingRenderParam;
 
 			}
 
@@ -1244,25 +1251,28 @@ function WebGLRenderer( parameters ) {
 
 		if ( currentRenderList ) {
 
+			// TODO We should be able to toggle this at this time, but it doesn't work. It's a nice optimization.
+			dpd.depthPeelingRender = depthPeelingRender;// && currentRenderList.transparent && currentRenderList.transparent.length > 0;
+
 			// TODO It may be worth hiding this whole branch in the DepthPeeling class. IMO it's not worth it
 			// at this time. This makes it clear that the render is quite different than usual and I think
 			// that's a good thing.
 
-			if ( dpd.isDepthPeelingOn() ) {
+			if ( dpd.isDepthPeelingOn( ) ) {
 
 				// TODO glState.restore worked in the proto, but not now
 				// var glState = new GLRestoreState( gl );
 
-				dpd.beginDrawLoop( camera );
+				dpd.beginDrawLoop( );
 				var numPasses = dpd.getNumDepthPeelingPasses();
 				for ( var dpPass = 0; dpPass < numPasses; dpPass ++ ) {
 
 					dpd.beginPass( dpPass );
 					this.renderInner( currentRenderList, scene, camera, forceClear );
-					dpd.endPass();
+					dpd.endPass( );
 
 				}
-				dpd.endDrawLoop();
+				dpd.endDrawLoop( );
 
 				// glState.restore( gl );
 				// gl.depthMask( true );
@@ -1822,6 +1832,8 @@ function WebGLRenderer( parameters ) {
 
 			if ( capabilities.logarithmicDepthBuffer ) {
 
+				if (_this.depthPeelingData.isDepthPeelingOn())
+					console.warn('Setting logarithmicDepthBuffer');
 				p_uniforms.setValue( _gl, 'logDepthBufFC',
 					2.0 / ( Math.log( camera.far + 1.0 ) / Math.LN2 ) );
 
@@ -2044,6 +2056,9 @@ function WebGLRenderer( parameters ) {
 
 			if ( m_uniforms.ltc_1 !== undefined ) m_uniforms.ltc_1.value = UniformsLib.LTC_1;
 			if ( m_uniforms.ltc_2 !== undefined ) m_uniforms.ltc_2.value = UniformsLib.LTC_2;
+
+			if ( state.getCurrentProgram() !== program.program )
+				console.warn( 'wrong program in use');
 
 			WebGLUniforms.upload( _gl, materialProperties.uniformsList, m_uniforms, textures );
 

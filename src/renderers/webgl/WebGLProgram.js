@@ -590,12 +590,6 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 
 	fragmentGlsl = dpd.modifyFragmentShader( fragmentGlsl );
 
-	if (dpd.depthPeelingRender)
-		if (dpd.isDepthPeelingOn())
-				console.log('**************** fragmentGlsl: Dp ON *****************\n' + fragmentGlsl + '\n************************\n');
-			else
-				console.log('**************** fragmentGlsl: Dp OFF ****************\n' + fragmentGlsl + '\n************************\n');
-
 	var glVertexShader = WebGLShader( gl, gl.VERTEX_SHADER, vertexGlsl );
 	var glFragmentShader = WebGLShader( gl, gl.FRAGMENT_SHADER, fragmentGlsl );
 

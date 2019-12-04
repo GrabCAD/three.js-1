@@ -49,6 +49,7 @@ import { CubeTexture } from '../../textures/CubeTexture.js';
 import { Texture } from '../../textures/Texture.js';
 import { DataTexture2DArray } from '../../textures/DataTexture2DArray.js';
 import { DataTexture3D } from '../../textures/DataTexture3D.js';
+import { WebGLErrorReporter } from './WebGLErrorReporter';
 
 var emptyTexture = new Texture();
 var emptyTexture2dArray = new DataTexture2DArray();
@@ -855,11 +856,23 @@ WebGLUniforms.upload = function ( gl, seq, values, textures ) {
 
 		if ( v.needsUpdate !== false ) {
 
+			if (gl instanceof WebGLErrorReporter) {
+				gl.debugDisableChecking();
+			}
+
 			// note: always updating when .needsUpdate is undefined
 			if (v.value && v.value.hasOwnProperty('texture'))
 				u.setValue( gl, v.value.texture, textures );
 			else
 				u.setValue( gl, v.value, textures );
+
+			if ( gl.getError() != gl.NO_ERROR) {
+				console.warn('Failed to set uniform: ' + u.id );
+			}
+
+			if (gl instanceof WebGLErrorReporter) {
+				gl.debugEnableChecking();
+			}
 
 		}
 

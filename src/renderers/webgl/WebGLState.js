@@ -523,6 +523,10 @@ function WebGLState( gl, extensions, utils, capabilities ) {
 
 	}
 
+	function getCurrentProgram () {
+		return currentProgram;
+	}
+
 	function setBlending( blending, blendEquation, blendSrc, blendDst, blendEquationAlpha, blendSrcAlpha, blendDstAlpha, premultipliedAlpha ) {
 
 		if ( blending === NoBlending ) {
@@ -947,6 +951,7 @@ function WebGLState( gl, extensions, utils, capabilities ) {
 		getCompressedTextureFormats: getCompressedTextureFormats,
 
 		useProgram: useProgram,
+		getCurrentProgram: getCurrentProgram,
 
 		setBlending: setBlending,
 		setMaterial: setMaterial,
