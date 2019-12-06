@@ -22802,8 +22802,8 @@ void main() {
 		);
 	} else if (testMode == 1) {
 		vec2 depth = texelFetch(frontColorIn, fragCoord.xy, 0).rg;
-		float farDepth = -depth.x;
-		float nearDepth = depth.y;
+		float nearestDepth = -depth.x;
+		float furthestDepth = depth.y;
 
 		float thresh = 0.5;
 		float step = 0.25;
@@ -22815,12 +22815,12 @@ void main() {
 		thresh += step; step *= 0.5;
 		thresh += step; step *= 0.5;
 		thresh -= step; step *= 0.5;
-		
-		float r = (farDepth - thresh) * 1.0 + 0.5;
-		float g = (nearDepth - thresh) * 1.0 + 0.5;
+
+		float r = clamp((furthestDepth - thresh) * -10.0 + 0.5, 0.0, 1.0);
+		float g = clamp((nearestDepth  - thresh) * -10.0 + 0.5, 0.0, 1.0);
 
 		fragColor = vec4(r, g, 0, 1);
-
+		
 	} else {
 
 		fragColor = texelFetch(frontColorIn, fragCoord, 0);
@@ -23194,7 +23194,7 @@ class WebGLDepthPeeling {
 				texUnit: texOffset + attachOffset,
 				texture: texture,
 				attachOffset: attachOffset,
-				internalFormat: 34842
+				internalFormat: 6408
 			} );
 
 		}
@@ -23781,7 +23781,7 @@ function WebGLRenderer( parameters ) {
 
 	initGLContext();
 
-	this.depthPeelingData = new WebGLDepthPeeling(this, 8);
+	this.depthPeelingData = new WebGLDepthPeeling(this, 4);
 	this.sortObjects = this.depthPeelingData.getNumDepthPeelingPasses() === 0;
 
 	this.getDepthPeelingData = function () {

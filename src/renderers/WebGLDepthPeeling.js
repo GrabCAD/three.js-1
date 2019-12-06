@@ -426,7 +426,7 @@ simplified
 				texUnit: texOffset + attachOffset,
 				texture: texture,
 				attachOffset: attachOffset,
-				internalFormat: _gl.RGBA16F
+				internalFormat: _gl.RGBA
 			} );
 
 		}
@@ -773,9 +773,9 @@ simplified
 				testFlagNormal,
 				testFlagDrawFrontColorRead,
 				testFlagDrawFrontColorWrite,
-//				testFlagDrawBackColorRead,
+				testFlagDrawBackColorRead,
 				testFlagDrawBackColorWrite,
-//				testFlagDrawDepthBufferRead,
+				testFlagDrawDepthBufferRead,
 				testFlagDrawDepthBufferWrite,
 				testFlagDrawBlendBackBuffer
 			];

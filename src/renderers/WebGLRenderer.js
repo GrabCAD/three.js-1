@@ -347,7 +347,7 @@ function WebGLRenderer( parameters ) {
 
 	initGLContext();
 
-	this.depthPeelingData = new WebGLDepthPeeling(this, 8);
+	this.depthPeelingData = new WebGLDepthPeeling(this, 4);
 	this.sortObjects = this.depthPeelingData.getNumDepthPeelingPasses() === 0;
 
 	this.getDepthPeelingData = function () {
