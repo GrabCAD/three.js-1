@@ -855,25 +855,25 @@ WebGLUniforms.upload = function ( gl, seq, values, textures ) {
 			v = values[ u.id ];
 
 		if ( v.needsUpdate !== false ) {
-
+/*
 			if (gl instanceof WebGLErrorReporter) {
 				gl.debugDisableChecking();
 			}
-
+*/
 			// note: always updating when .needsUpdate is undefined
 			if (v.value && v.value.hasOwnProperty('texture'))
 				u.setValue( gl, v.value.texture, textures );
 			else
 				u.setValue( gl, v.value, textures );
-
+/*
 			if ( gl.getError() != gl.NO_ERROR) {
-				console.warn('Failed to set uniform: ' + u.id );
+				console.warn('failed to set uniform: ' + u.id );
 			}
 
 			if (gl instanceof WebGLErrorReporter) {
 				gl.debugEnableChecking();
 			}
-
+*/
 		}
 
 	}

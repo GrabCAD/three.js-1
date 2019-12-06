@@ -1,8 +1,10 @@
 (function (global, factory) {
-	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
-	typeof define === 'function' && define.amd ? define(['exports'], factory) :
-	(global = global || self, factory(global.THREE = {}));
-}(this, function (exports) { 'use strict';
+	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('@andrewray/glsl-preprocessor')) :
+	typeof define === 'function' && define.amd ? define(['exports', '@andrewray/glsl-preprocessor'], factory) :
+	(global = global || self, factory(global.THREE = {}, global.Preprocessor));
+}(this, function (exports, Preprocessor) { 'use strict';
+
+	Preprocessor = Preprocessor && Preprocessor.hasOwnProperty('default') ? Preprocessor['default'] : Preprocessor;
 
 	// Polyfills
 
@@ -16898,25 +16900,25 @@
 				v = values[ u.id ];
 
 			if ( v.needsUpdate !== false ) {
-
+	/*
 				if (gl instanceof WebGLErrorReporter) {
 					gl.debugDisableChecking();
 				}
-
+	*/
 				// note: always updating when .needsUpdate is undefined
 				if (v.value && v.value.hasOwnProperty('texture'))
 					u.setValue( gl, v.value.texture, textures );
 				else
 					u.setValue( gl, v.value, textures );
-
+	/*
 				if ( gl.getError() != gl.NO_ERROR) {
-					console.warn('Failed to set uniform: ' + u.id );
+					console.warn('failed to set uniform: ' + u.id );
 				}
 
 				if (gl instanceof WebGLErrorReporter) {
 					gl.debugEnableChecking();
 				}
-
+	*/
 			}
 
 		}
@@ -17567,6 +17569,7 @@
 		var vertexGlsl = prefixVertex + vertexShader;
 		var fragmentGlsl = prefixFragment + fragmentShader;
 
+		vertexGlsl = dpd.modifyVertexShader( vertexGlsl );
 		fragmentGlsl = dpd.modifyFragmentShader( fragmentGlsl );
 
 		var glVertexShader = WebGLShader( gl, 35633, vertexGlsl );
@@ -22757,13 +22760,13 @@
 
 	}
 
-	var depthPeelingPrefixChunk = "#ifdef DEPTH_PEELING\n#define MAX_DEPTH 99999.0\nuniform sampler2D depthBufferIn;\nuniform sampler2D frontColorIn;\nlayout(location=0) out vec2 depth;\nlayout(location=1) out vec4 outFrontColor;\nlayout(location=2) out vec4 outBackColor;\n#endif";
+	var depthPeelingPrefixChunk = "#ifdef DEPTH_PEELING\n#define MAX_DEPTH 99999.0\nuniform sampler2D depthBufferIn;\nuniform sampler2D frontColorIn;\nlayout(location=0) out vec2 depth;\nlayout(location=1) out vec4 outFrontColor;\nlayout(location=2) out vec4 outBackColor;\nvec3 clamp3(vec3 val, float min, float max) {\n\treturn vec3(\n\t\tclamp(val.r, min, max ),\n\t\tclamp(val.g, min, max ), \n\t\tclamp(val.b, min, max )\n\t);\n}\nvec4 clamp4(vec4 val, float min, float max) {\n\treturn vec4(\n\t\tclamp(val.r, min, max ),\n\t\tclamp(val.g, min, max ), \n\t\tclamp(val.b, min, max ), \n\t\tclamp(val.a, min, max )\n\t);\n}\n#endif";
 
 	var gammaFuncs = "#ifdef DEPTH_PEELING\n#if 1\n\tfloat lin(float inVal)\n\t{\n\t\tfloat gamma = 2.2;\n\t\treturn pow(abs(inVal), gamma);\n\t}\n\t\n\tvec3 lin(vec3 inVal)\n\t{\n\t\treturn vec3(lin(inVal.r), lin(inVal.g), lin(inVal.b));\n\t}\n\tfloat nonLin(float inVal)\n\t{\n\t\tfloat gammaInv = 1.0 / 2.2;\n\t\treturn pow(abs(inVal), gammaInv);\n\t}\n\tvec3 nonLin(vec3 inVal)\n\t{\n\t\treturn vec3(\n\t\t\tnonLin(inVal.r), \n\t\t\tnonLin(inVal.g), \n\t\t\tnonLin(inVal.b)\n\t\t);\n\t}\n#else\n#define lin(inVal) inVal\n#define nonLin(inVal) inVal\n#endif\n#endif";
 
 	var depthPeelingMainPrefixChunk = "#ifdef DEPTH_PEELING\nfloat fragDepth = gl_FragCoord.z;\nivec2 fragCoord = ivec2(gl_FragCoord.xy);\nvec2 lastDepth = texelFetch(depthBufferIn, fragCoord, 0).rg;\noutFrontColor = texelFetch(frontColorIn, fragCoord, 0);\noutBackColor = vec4(0.0);\ndepth.rg = vec2(-MAX_DEPTH);\nfloat nearestDepth = -lastDepth.x;\nfloat furthestDepth = lastDepth.y;\nif (fragDepth < nearestDepth || fragDepth > furthestDepth) {\n\t\treturn;\n}\nif (fragDepth > nearestDepth && fragDepth < furthestDepth) {\n\t\tdepth.rg = vec2(-fragDepth, fragDepth);\n\t\treturn;\n}\n#endif";
 
-	var depthPeelingMainSuffixChunk = "#ifdef DEPTH_PEELING\nif (fragDepth == nearestDepth) {\n\tvec4 farColor = three_FragColor;\n\tvec4 nearColor = outFrontColor;\n\tfloat nearLinAlpha = lin(nearColor.a); \n\tfloat farLinAlpha = lin(farColor.a); \n\tfloat alphaMultiplier = 1.0 - nearLinAlpha;\n\toutFrontColor.rgb = nonLin(lin(farColor.rgb) * farLinAlpha * alphaMultiplier +\n\t\tlin(nearColor.rgb) * farLinAlpha);\n\toutFrontColor.a = nonLin(farLinAlpha * farLinAlpha * alphaMultiplier + nearLinAlpha);\n} else {\n\toutBackColor = three_FragColor;\n}\n#else\ngl_FragColor = three_FragColor;\t\n#endif";
+	var depthPeelingMainSuffixChunk = "#ifdef DEPTH_PEELING\nthree_FragColor = clamp4( three_FragColor, 0.0, 1.0 );\nbool valid = (\n\t(0.0 <= three_FragColor.r && three_FragColor.r <= 1.0) &&\n\t(0.0 <= three_FragColor.g && three_FragColor.g <= 1.0) &&\n\t(0.0 <= three_FragColor.b && three_FragColor.b <= 1.0) &&\n\t(0.0 <= three_FragColor.a && three_FragColor.a <= 1.0)\n\t);\nif (!valid )\n\tthree_FragColor = vec4(1,0,0,1);\nif (fragDepth == nearestDepth) {\n\tvec4 farColor = three_FragColor;\n\tvec4 nearColor = outFrontColor;\n\tfloat nearLinAlpha = lin(nearColor.a); \n\tfloat farLinAlpha = lin(farColor.a); \n\tfloat alphaMultiplier = 1.0 - nearLinAlpha;\n\toutFrontColor.rgb = nonLin(lin(farColor.rgb) * farLinAlpha * alphaMultiplier +\n\t\tlin(nearColor.rgb) * farLinAlpha);\n\toutFrontColor.a = nonLin(farLinAlpha * farLinAlpha * alphaMultiplier + nearLinAlpha);\n} else {\n\toutBackColor = three_FragColor;\n}\n#else\ngl_FragColor = three_FragColor;\t\n#endif";
 
 	var srcVertexShaderQuad = /* glsl */ `#version 300 es
 in vec4 inPosition;
@@ -22895,6 +22898,14 @@ void main() {
 				return result;
 			};
 
+			this.modifyVertexShader = function ( vertexGlsl ) {
+
+				// Empty stub.
+				// It had something in it but it was removed. Leaving it for future use.
+				return vertexGlsl;
+
+			};
+
 			this.modifyFragmentShader = function ( fragmentGlsl ) {
 
 				var depthPeelingEnabled = this.isDepthPeelingOn();
@@ -22926,7 +22937,7 @@ void main() {
 				var fragmentGlslSuffix = depthPeelingEnabled ?
 					depthPeelingMainSuffixChunk :
 					'gl_FragColor = three_FragColor;';
-				fragmentGlsl = fragmentGlsl.substring(0 , fragmentGlsl.length - 1);
+				fragmentGlsl = fragmentGlsl.substring(0, fragmentGlsl.length - 1);
 				fragmentGlsl = fragmentGlsl + '\n' + fragmentGlslSuffix + '\n}';
 
 				return fragmentGlsl;
@@ -23118,8 +23129,8 @@ void main() {
 				// https://www.khronos.org/registry/webgl/specs/latest/2.0/#TEXTURE_TYPES_FORMATS_FROM_DOM_ELEMENTS_TABLE
 				// This code assures that types are in agreement.
 
-				if (params.internalFormat === _gl.RG32F ) {
-					params.format = _gl.RG;
+				if (params.internalFormat === 33328 ) {
+					params.format = 33319;
 					params.type = 5126;
 				} else if (params.internalFormat === 34842 ) {
 					params.format = 6408;
@@ -23180,7 +23191,7 @@ void main() {
 					texUnit: texOffset + attachOffset,
 					attachOffset: attachOffset,
 					texture: texture,
-					internalFormat: _gl.RG32F
+					internalFormat: 33328
 				} );
 			}
 
@@ -23203,25 +23214,6 @@ void main() {
 
 			}
 
-			function checkFrameBuffer () {
-
-				var status = _gl.checkFramebufferStatus( 36160 );
-
-				if ( status !== 36053 ) {
-					if ( status === _gl.FRAMEBUFFER_INCOMPLETE_ATTACHMENT )
-						console.warn( 'FRAMEBUFFER_INCOMPLETE_ATTACHMENT' );
-					else if ( status === _gl.FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT )
-						console.warn( 'FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT' );
-					else if ( status === _gl.FRAMEBUFFER_INCOMPLETE_DIMENSIONS )
-						console.warn( 'FRAMEBUFFER_INCOMPLETE_DIMENSIONS' );
-					else if ( status === _gl.FRAMEBUFFER_UNSUPPORTED )
-						console.warn( 'FRAMEBUFFER_UNSUPPORTED' );
-					else if ( status === _gl.FRAMEBUFFER_INCOMPLETE_MULTISAMPLE )
-						console.warn( 'FRAMEBUFFER_INCOMPLETE_MULTISAMPLE' );
-				}
-
-			}
-
 			function resizeDepthBuffers_ ( pingPongIndex ) {
 
 				var texOffset = pingPongIndex * 3;
@@ -23230,8 +23222,6 @@ void main() {
 				resizeDepthBuffer_( texOffset, _depthTexUnitOffset, _depthTarget[ pingPongIndex ] );
 				resizeColorBuffer_( texOffset, _frontColorTexUnitOffset, _frontColorTarget[ pingPongIndex ] );
 				resizeColorBuffer_( texOffset, _backColorTexUnitOffset, _backColorTarget[ pingPongIndex ] );
-
-				checkFrameBuffer();
 
 				_gl.bindFramebuffer( 36160, null );
 
@@ -23246,8 +23236,6 @@ void main() {
 					attachOffset: 0,
 					internalFormat: 34842
 				} );
-
-				checkFrameBuffer();
 
 				_gl.bindFramebuffer( 36160, null );
 
@@ -23333,39 +23321,7 @@ void main() {
 				clearBuffersForDraw_(passNum === 0);
 			};
 
-			this.bindBuffersForDraw = function ( tjsProgram ) {
-
-				if ( this.isDepthPeelingOn() ) {
-
-	/*
-					// Clear input color buffer test - passes. This test changes the color of the next pass
-					_gl.bindFramebuffer(36009, _colorBuffers[_readId]);
-					_gl.drawBuffers([36064, 36064 + 1]);
-					_gl.clearColor(0, 1, 0, 0.5);
-					_gl.clear(16384);
-	*/
-
-					_gl.bindFramebuffer( 36009, _depthBuffers[ _writeId ] );
-					_gl.drawBuffers( [ 36064, 36064 + 1, 36064 + 2 ] );
-					_gl.blendEquation( 32776 );
-					_gl.enable( 3042 );
-					_gl.disable( 2929 );
-					_gl.enable( 2884 );
-					checkFrameBuffer();
-
-					var program = _state.getCurrentProgram();
-					var depthBufferInLoc = _gl.getUniformLocation(program, "depthBufferIn");
-					var frontColorInLoc = _gl.getUniformLocation(program, "frontColorIn");
-
-					var offsetRead = 3 * _readId;
-					_gl.uniform1i( depthBufferInLoc, offsetRead );
-					_gl.uniform1i( frontColorInLoc, offsetRead + _frontColorTexUnitOffset ); // Read from front color
-
-				}
-
-			};
-
-			this.bindBuffersForDraw = function ( tjsProgram ) {
+			this.bindBuffersForDraw = function ( ) {
 
 				if (this.isDepthPeelingOn()) {
 
@@ -23380,10 +23336,9 @@ void main() {
 					_gl.bindFramebuffer( 36009, _depthBuffers[ _writeId ] );
 					_gl.drawBuffers( [ 36064, 36064 + 1, 36064 + 2 ] );
 					_gl.blendEquation( 32776 );
-					_gl.enable( 3042 );
-					_gl.disable( 2929 );
-					_gl.enable( 2884 );
-					checkFrameBuffer();
+					_state.enable( 3042 );
+					_state.disable( 2929 );
+					_state.setCullFace( CullFaceNone );
 
 					var program = _state.getCurrentProgram();
 					var depthBufferInLoc = _gl.getUniformLocation(program, "depthBufferIn");
@@ -23832,7 +23787,7 @@ void main() {
 
 		initGLContext();
 
-		this.depthPeelingData = new WebGLDepthPeeling(this, 10);
+		this.depthPeelingData = new WebGLDepthPeeling(this, 8);
 		this.sortObjects = this.depthPeelingData.getNumDepthPeelingPasses() === 0;
 
 		this.getDepthPeelingData = function () {
@@ -24404,6 +24359,7 @@ void main() {
 
 			}
 
+			_this.depthPeelingData.bindBuffersForDraw( );
 			if ( geometry && geometry.isInstancedBufferGeometry ) {
 
 				if ( geometry.maxInstancedCount > 0 ) {
@@ -25017,7 +24973,6 @@ void main() {
 				state.setMaterial( material );
 
 				var program = setProgram( camera, scene.fog, material, object );
-				_this.depthPeelingData.bindBuffersForDraw( program );
 
 				_currentGeometryProgram.geometry = null;
 				_currentGeometryProgram.program = null;

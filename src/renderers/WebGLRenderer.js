@@ -8,7 +8,8 @@ import {
 	TriangleStripDrawMode,
 	TrianglesDrawMode,
 	LinearToneMapping,
-	BackSide
+	BackSide,
+	DoubleSide
 } from '../constants.js';
 import { _Math } from '../math/Math.js';
 import { DataTexture } from '../textures/DataTexture.js';
@@ -346,7 +347,7 @@ function WebGLRenderer( parameters ) {
 
 	initGLContext();
 
-	this.depthPeelingData = new WebGLDepthPeeling(this, 10);
+	this.depthPeelingData = new WebGLDepthPeeling(this, 8);
 	this.sortObjects = this.depthPeelingData.getNumDepthPeelingPasses() === 0;
 
 	this.getDepthPeelingData = function () {
@@ -918,6 +919,7 @@ function WebGLRenderer( parameters ) {
 
 		}
 
+		_this.depthPeelingData.bindBuffersForDraw( );
 		if ( geometry && geometry.isInstancedBufferGeometry ) {
 
 			if ( geometry.maxInstancedCount > 0 ) {
@@ -1531,7 +1533,6 @@ function WebGLRenderer( parameters ) {
 			state.setMaterial( material );
 
 			var program = setProgram( camera, scene.fog, material, object );
-			_this.depthPeelingData.bindBuffersForDraw( program );
 
 			_currentGeometryProgram.geometry = null;
 			_currentGeometryProgram.program = null;

@@ -588,6 +588,7 @@ function WebGLProgram( renderer, extensions, code, material, shader, parameters,
 	var vertexGlsl = prefixVertex + vertexShader;
 	var fragmentGlsl = prefixFragment + fragmentShader;
 
+	vertexGlsl = dpd.modifyVertexShader( vertexGlsl );
 	fragmentGlsl = dpd.modifyFragmentShader( fragmentGlsl );
 
 	var glVertexShader = WebGLShader( gl, gl.VERTEX_SHADER, vertexGlsl );

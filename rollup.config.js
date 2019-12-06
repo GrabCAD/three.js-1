@@ -53,6 +53,8 @@ function glconstants() {
 		ALPHA: 6406,
 		RGB: 6407,
 		RGBA: 6408,
+		RG: 33319,
+		RG32F: 33328,
 		LUMINANCE: 6409,
 		LUMINANCE_ALPHA: 6410,
 		VERSION: 7938,

@@ -1,3 +1,4 @@
+import { CullFaceNone } from '../constants';
 import { WebGLErrorReporter } from './webgl/WebGLErrorReporter';
 import depthPeelingPrefixChunk from './shaders/ShaderChunk/depth_peeling_prefix.glsl';
 import gammaFuncs from './shaders/ShaderChunk/depth_peeling_gamma_functions.glsl';
@@ -8,6 +9,8 @@ import srcFragmentShaderBlendBack from './shaders/ShaderChunk/depth_peeling_frag
 import srcFragmentShaderFinal0 from './shaders/ShaderChunk/depth_peeling_fragment_final_0.glsl';
 import srcFragmentShaderFinal1 from './shaders/ShaderChunk/depth_peeling_fragment_final_1.glsl';
 
+import Preprocessor from '@andrewray/glsl-preprocessor';
+
 class WebGLDepthPeeling {
 
 	constructor(renderer, numDepthPeelingPasses) {
@@ -17,7 +20,7 @@ class WebGLDepthPeeling {
 		const _debugDrawBuffersDelay = -1;
 
 		// Sets an override maximum on the number of depth peeling passes in the loop
-		const _debugMaxDepthPeelingPasses = -1;
+		var _debugNumDepthPeelingPasses = 1;
 
 		class ProgramData {
 
@@ -64,8 +67,11 @@ class WebGLDepthPeeling {
 				_blendBackTarget;
 
 		this.getNumDepthPeelingPasses = function () {
-			if ( _debugMaxDepthPeelingPasses > 0 && _debugMaxDepthPeelingPasses < this.numDepthPeelingPasses )
-				return _debugMaxDepthPeelingPasses;
+			if ( _debugDrawBuffersDelay > 0 ) {
+				if (_debugNumDepthPeelingPasses < 1 || _debugNumDepthPeelingPasses > this.numDepthPeelingPasses )
+					_debugNumDepthPeelingPasses = 1;
+				return _debugNumDepthPeelingPasses;
+			}
 			return this.numDepthPeelingPasses;
 		};
 
@@ -83,9 +89,47 @@ class WebGLDepthPeeling {
 			return result;
 		};
 
+		var _preProc;
+		function dumpShaderSource( prefix, source ) {
+
+			const dumpSource = false;
+			if ( dumpSource && _this.isDepthPeelingOn() ) {
+
+				if (!_preProc)
+					_preProc = new Preprocessor();
+
+				var simplifedSource = _preProc.preprocess(  source );
+				console.warn(
+					`\n` + prefix + `
+raw
+*****************
+*****************
+
+` + source + `
+
+simplified
+*****************
+*****************
+` + simplifedSource + `
+`);
+
+			}
+
+		}
+
+		this.modifyVertexShader = function ( vertexGlsl ) {
+
+			// Empty stub.
+			// It had something in it but it was removed. Leaving it for future use.
+			return vertexGlsl;
+
+		};
+
 		this.modifyFragmentShader = function ( fragmentGlsl ) {
 
 			var depthPeelingEnabled = this.isDepthPeelingOn();
+
+			dumpShaderSource('pre fragmentGlsl', fragmentGlsl );
 
 			var fragmentGlslPrefix = depthPeelingEnabled ?
 			'\n' + depthPeelingMainPrefixChunk :
@@ -114,8 +158,10 @@ class WebGLDepthPeeling {
 			var fragmentGlslSuffix = depthPeelingEnabled ?
 				depthPeelingMainSuffixChunk :
 				'gl_FragColor = three_FragColor;';
-			fragmentGlsl = fragmentGlsl.substring(0 , fragmentGlsl.length - 1);
+			fragmentGlsl = fragmentGlsl.substring(0, fragmentGlsl.length - 1);
 			fragmentGlsl = fragmentGlsl + '\n' + fragmentGlslSuffix + '\n}';
+
+			dumpShaderSource('post fragmentGlsl', fragmentGlsl );
 
 			return fragmentGlsl;
 		};
@@ -395,7 +441,8 @@ class WebGLDepthPeeling {
 		}
 
 		function checkFrameBuffer () {
-
+/*
+			// Debugging tests for the framebuffer. Disable unless you need it.
 			var status = _gl.checkFramebufferStatus( _gl.FRAMEBUFFER );
 
 			if ( status !== _gl.FRAMEBUFFER_COMPLETE ) {
@@ -410,7 +457,7 @@ class WebGLDepthPeeling {
 				else if ( status === _gl.FRAMEBUFFER_INCOMPLETE_MULTISAMPLE )
 					console.warn( 'FRAMEBUFFER_INCOMPLETE_MULTISAMPLE' );
 			}
-
+*/
 		}
 
 		function resizeDepthBuffers_ ( pingPongIndex ) {
@@ -526,39 +573,7 @@ class WebGLDepthPeeling {
 			clearBuffersForDraw_(passNum === 0);
 		};
 
-		this.bindBuffersForDraw = function ( tjsProgram ) {
-
-			if ( this.isDepthPeelingOn() ) {
-
-/*
-				// Clear input color buffer test - passes. This test changes the color of the next pass
-				_gl.bindFramebuffer(_gl.DRAW_FRAMEBUFFER, _colorBuffers[_readId]);
-				_gl.drawBuffers([_gl.COLOR_ATTACHMENT0, _gl.COLOR_ATTACHMENT0 + 1]);
-				_gl.clearColor(0, 1, 0, 0.5);
-				_gl.clear(_gl.COLOR_BUFFER_BIT);
-*/
-
-				_gl.bindFramebuffer( _gl.DRAW_FRAMEBUFFER, _depthBuffers[ _writeId ] );
-				_gl.drawBuffers( [ _gl.COLOR_ATTACHMENT0, _gl.COLOR_ATTACHMENT0 + 1, _gl.COLOR_ATTACHMENT0 + 2 ] );
-				_gl.blendEquation( _gl.MAX );
-				_gl.enable( _gl.BLEND );
-				_gl.disable( _gl.DEPTH_TEST );
-				_gl.enable( _gl.CULL_FACE );
-				checkFrameBuffer();
-
-				var program = _state.getCurrentProgram();
-				var depthBufferInLoc = _gl.getUniformLocation(program, "depthBufferIn");
-				var frontColorInLoc = _gl.getUniformLocation(program, "frontColorIn");
-
-				var offsetRead = 3 * _readId;
-				_gl.uniform1i( depthBufferInLoc, offsetRead );
-				_gl.uniform1i( frontColorInLoc, offsetRead + _frontColorTexUnitOffset ); // Read from front color
-
-			}
-
-		};
-
-		this.bindBuffersForDraw = function ( tjsProgram ) {
+		this.bindBuffersForDraw = function ( ) {
 
 			if (this.isDepthPeelingOn()) {
 
@@ -573,9 +588,9 @@ class WebGLDepthPeeling {
 				_gl.bindFramebuffer( _gl.DRAW_FRAMEBUFFER, _depthBuffers[ _writeId ] );
 				_gl.drawBuffers( [ _gl.COLOR_ATTACHMENT0, _gl.COLOR_ATTACHMENT0 + 1, _gl.COLOR_ATTACHMENT0 + 2 ] );
 				_gl.blendEquation( _gl.MAX );
-				_gl.enable( _gl.BLEND );
-				_gl.disable( _gl.DEPTH_TEST );
-				_gl.enable( _gl.CULL_FACE );
+				_state.enable( _gl.BLEND );
+				_state.disable( _gl.DEPTH_TEST );
+				_state.setCullFace( CullFaceNone );
 				checkFrameBuffer();
 
 				var program = _state.getCurrentProgram();
@@ -687,7 +702,7 @@ class WebGLDepthPeeling {
 				flagChanged: flagChanged,
 				testMode: 1,
 				texUnit: pingPongOffset + _depthTexUnitOffset,
-				label:'testFlag: depth ' + (id == _readId ? 'read' : 'write')
+				label: 'testFlag (' + _debugNumDepthPeelingPasses + '): depth ' + (id == _readId ? 'read' : 'write')
 			} );
 
 		}
@@ -699,7 +714,7 @@ class WebGLDepthPeeling {
 				flagChanged: flagChanged,
 				testMode: 2,
 				texUnit: pingPongOffset + _frontColorTexUnitOffset,
-				label:'testFlag: front ' + (id == _readId ? 'read' : 'write')
+				label: 'testFlag (' + _debugNumDepthPeelingPasses + '): front ' + (id == _readId ? 'read' : 'write')
 			} );
 
 		}
@@ -711,7 +726,7 @@ class WebGLDepthPeeling {
 				flagChanged: flagChanged,
 				testMode: 2,
 				texUnit: pingPongOffset + _backColorTexUnitOffset,
-				label:'testFlag: back ' + (id == _readId ? 'read' : 'write')
+				label: 'testFlag (' + _debugNumDepthPeelingPasses + '): back ' + (id == _readId ? 'read' : 'write')
 			} );
 
 		};
@@ -722,7 +737,7 @@ class WebGLDepthPeeling {
 				flagChanged: flagChanged,
 				testMode: 2,
 				texUnit: _blendBackTexUnit,
-				label:'testFlag: blendBack'
+				label: 'testFlag (' + _debugNumDepthPeelingPasses + '): blendBack'
 			} );
 
 		};
@@ -758,9 +773,9 @@ class WebGLDepthPeeling {
 				testFlagNormal,
 				testFlagDrawFrontColorRead,
 				testFlagDrawFrontColorWrite,
-				testFlagDrawBackColorRead,
+//				testFlagDrawBackColorRead,
 				testFlagDrawBackColorWrite,
-				testFlagDrawDepthBufferRead,
+//				testFlagDrawDepthBufferRead,
 				testFlagDrawDepthBufferWrite,
 				testFlagDrawBlendBackBuffer
 			];
@@ -788,6 +803,7 @@ class WebGLDepthPeeling {
 						if (_testIndex >= buffsToDraw.length) {
 
 							_testIndex = 0;
+							_debugNumDepthPeelingPasses++;
 
 						}
 						flagChanged = true;
@@ -800,7 +816,7 @@ class WebGLDepthPeeling {
 				if (testFlag === testFlagNormal) {
 
 					if (flagChanged)
-						console.warn('testFlag: normal');
+						console.warn('testFlag (' + _debugNumDepthPeelingPasses + '): normal');
 					_blendFinal();
 
 				} else if (testFlag === testFlagDrawFrontColorRead)
