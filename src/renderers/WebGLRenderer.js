@@ -776,11 +776,13 @@ function WebGLRenderer( parameters ) {
 
 		if ( _currentGeometryProgram.geometry !== geometry.id ||
 			_currentGeometryProgram.program !== program.id ||
-			_currentGeometryProgram.wireframe !== ( material.wireframe === true ) ) {
+			_currentGeometryProgram.wireframe !== ( material.wireframe === true ) ||
+			_currentGeometryProgram.transparent !== material.transparent ) {
 
 			_currentGeometryProgram.geometry = geometry.id;
 			_currentGeometryProgram.program = program.id;
 			_currentGeometryProgram.wireframe = material.wireframe === true;
+			_currentGeometryProgram.transparent = material.transparent;
 			updateBuffers = true;
 
 		}
