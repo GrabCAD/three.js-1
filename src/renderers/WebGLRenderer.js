@@ -347,7 +347,7 @@ function WebGLRenderer( parameters ) {
 
 	initGLContext();
 
-	this.depthPeelingData = new WebGLDepthPeeling(this, 4);
+	this.depthPeelingData = new WebGLDepthPeeling(this, 8);
 	this.sortObjects = this.depthPeelingData.getNumDepthPeelingPasses() === 0;
 
 	this.getDepthPeelingData = function () {
@@ -1143,6 +1143,20 @@ function WebGLRenderer( parameters ) {
 
 	// Rendering
 
+	this.renderShadows = function ( scene, camera ) {
+
+		if ( _clippingEnabled ) _clipping.beginShadows();
+
+		var shadowsArray = currentRenderState.state.shadowsArray;
+
+		shadowMap.render( shadowsArray, scene, camera );
+
+		currentRenderState.setupLights( camera );
+
+		if ( _clippingEnabled ) _clipping.endShadows();
+
+	};
+
 	this.render = function ( scene, camera, depthPeelingRenderParam ) {
 		var dpd = this.depthPeelingData;
 
@@ -1229,19 +1243,8 @@ function WebGLRenderer( parameters ) {
 
 		}
 
-		//
-
-		if ( _clippingEnabled ) _clipping.beginShadows();
-
-		var shadowsArray = currentRenderState.state.shadowsArray;
-
-		shadowMap.render( shadowsArray, scene, camera );
-
-		currentRenderState.setupLights( camera );
-
-		if ( _clippingEnabled ) _clipping.endShadows();
-
-		//
+		// TODO this should be moved inside renderInner so the shadows are depth peeled
+		this.renderShadows( scene, camera );
 
 		if ( this.info.autoReset ) this.info.reset();
 
@@ -1271,7 +1274,7 @@ function WebGLRenderer( parameters ) {
 				var numPasses = dpd.getNumDepthPeelingPasses();
 				for ( var dpPass = 0; dpPass < numPasses; dpPass ++ ) {
 
-					dpd.beginPass( dpPass );
+					dpd.beginDrawPass( );
 					this.renderInner( currentRenderList, scene, camera, forceClear );
 					dpd.endPass( );
 

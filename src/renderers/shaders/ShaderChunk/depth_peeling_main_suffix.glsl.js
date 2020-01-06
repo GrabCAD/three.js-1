@@ -17,6 +17,7 @@ if (!valid )
 	three_FragColor = vec4(1,0,0,1);
 
 if (fragDepth == nearestDepth) {
+//if (depthEqual(fragDepth, fragFaceStatus, nearestDepth, nearestFaceStatus)) {
 	vec4 farColor = three_FragColor;
 	vec4 nearColor = outFrontColor;
 	float nearLinAlpha = lin(nearColor.a); 
@@ -25,8 +26,8 @@ if (fragDepth == nearestDepth) {
 	float alphaMultiplier = 1.0 - nearLinAlpha;
 
 	outFrontColor.rgb = nonLin(lin(farColor.rgb) * farLinAlpha * alphaMultiplier +
-		lin(nearColor.rgb) * farLinAlpha);
-	outFrontColor.a = nonLin(farLinAlpha * farLinAlpha * alphaMultiplier + nearLinAlpha);
+		lin(nearColor.rgb) * nearLinAlpha);
+	outFrontColor.a = nonLin(farLinAlpha * alphaMultiplier + nearLinAlpha);
 } else {
 	outBackColor = three_FragColor;
 }
