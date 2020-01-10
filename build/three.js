@@ -23338,11 +23338,12 @@ void renderDepth(int testMode) {
 			depth = 1.0 - depthQuad.x;
 			channel = vec3(1,0,0);
 			CAL_INTEN(0.675, 0.008); // Determined by sampling the output image
+			intensity = 1.0 - intensity;
 			break;
 
 		case testFlagDrawDepthFar:
 			depth = depthQuad.y;
-			channel = vec3(0,1,0);
+			channel = vec3(1,0,0);
 			CAL_INTEN(0.675, 0.008); // Determined by sampling the output image
 			break;
 
@@ -24021,7 +24022,10 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 
 
 				_gl.readPixels(0, 0, _this.bufferSize.width, _this.bufferSize.height, 6408, 5121, pixels);
-
+	/*
+				dumpAvgRange(filename, pixels, 0);
+				dumpHistogram(filename, pixels, 0);
+	*/
 				const frameId = params.bufferId + '_' + params.mode;
 				if ( !_passFrames [ _passNum ] ) {
 					_passFrames [ _passNum ] = [];

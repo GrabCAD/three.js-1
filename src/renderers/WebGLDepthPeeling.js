@@ -742,11 +742,10 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 
 
 			_gl.readPixels(0, 0, _this.bufferSize.width, _this.bufferSize.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-			if (false && imageStr === 'depth_near') {
-				dumpAvgRange(filename, pixels, 0);
-				dumpHistogram(filename, pixels, 0);
-			}
-
+/*
+			dumpAvgRange(filename, pixels, 0);
+			dumpHistogram(filename, pixels, 0);
+*/
 			const frameId = params.bufferId + '_' + params.mode;
 			if ( !_passFrames [ _passNum ] ) {
 				_passFrames [ _passNum ] = [];
