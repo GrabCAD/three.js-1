@@ -23296,7 +23296,7 @@ var depthPeelingPrefixChunk = "#ifdef DEPTH_PEELING\n#define MAX_DEPTH 99999.0\n
 
 var gammaFuncs = "#ifdef DEPTH_PEELING\n#if 1\n\tfloat lin(float inVal)\n\t{\n\t\tfloat gamma = 2.2;\n\t\treturn pow(abs(inVal), gamma);\n\t}\n\t\n\tvec3 lin(vec3 inVal)\n\t{\n\t\treturn vec3(lin(inVal.r), lin(inVal.g), lin(inVal.b));\n\t}\n\tfloat nonLin(float inVal)\n\t{\n\t\tfloat gammaInv = 1.0 / 2.2;\n\t\treturn pow(abs(inVal), gammaInv);\n\t}\n\tvec3 nonLin(vec3 inVal)\n\t{\n\t\treturn vec3(\n\t\t\tnonLin(inVal.r), \n\t\t\tnonLin(inVal.g), \n\t\t\tnonLin(inVal.b)\n\t\t);\n\t}\n#else\n#define lin(inVal) inVal\n#define nonLin(inVal) inVal\n#endif\n#endif";
 
-var depthPeelingMainPrefixChunk = "#ifdef DEPTH_PEELING\nfloat fragDepth = gl_FragCoord.z;\nivec2 fragCoord = ivec2(gl_FragCoord.xy);\nvec4 lastDepth = texelFetch(depthBufferIn, fragCoord, 0);\noutFrontColor = texelFetch(frontColorIn, fragCoord, 0);\noutBackColor = vec4(0.0);\ndepth = vec4( -MAX_DEPTH );\ndepth = vec4(0.675);\nreturn;\nfloat nearestDepth       = 1.0 - lastDepth.x;\nfloat furthestDepth      = lastDepth.y;\nfloat nearestFaceStatus  = 1.0 - lastDepth.z;\nfloat furthestFaceStatus = lastDepth.w;\nfloat fragFaceStatus = DP_FACE_STATUS_NONE;\nif (depthLess(fragDepth, fragFaceStatus, nearestDepth, nearestFaceStatus) || \n    depthGreater(fragDepth, fragFaceStatus, furthestDepth, furthestFaceStatus)) {\n\t\treturn;\n}\nif (depthGreater(fragDepth, fragFaceStatus, nearestDepth, nearestFaceStatus) && \n\t\tdepthLess(fragDepth, fragFaceStatus, furthestDepth, furthestFaceStatus)) {\n\t\tdepth = vec4(1.0 - fragDepth, fragDepth, 1.0 - fragFaceStatus, fragFaceStatus);\n\t\treturn;\n}\n#endif";
+var depthPeelingMainPrefixChunk = "#ifdef DEPTH_PEELING\nfloat fragDepth = gl_FragCoord.z;\nivec2 fragCoord = ivec2(gl_FragCoord.xy);\nvec4 lastDepth = texelFetch(depthBufferIn, fragCoord, 0);\noutFrontColor = texelFetch(frontColorIn, fragCoord, 0);\noutBackColor = vec4(0.0);\ndepth = vec4( -MAX_DEPTH );\nfloat nearestDepth       = 1.0 - lastDepth.x;\nfloat furthestDepth      = lastDepth.y;\nfloat nearestFaceStatus  = 1.0 - lastDepth.z;\nfloat furthestFaceStatus = lastDepth.w;\nfloat fragFaceStatus = DP_FACE_STATUS_NONE;\nif (depthLess(fragDepth, fragFaceStatus, nearestDepth, nearestFaceStatus) || \n    depthGreater(fragDepth, fragFaceStatus, furthestDepth, furthestFaceStatus)) {\n\t\treturn;\n}\nif (depthGreater(fragDepth, fragFaceStatus, nearestDepth, nearestFaceStatus) && \n\t\tdepthLess(fragDepth, fragFaceStatus, furthestDepth, furthestFaceStatus)) {\n\t\tdepth = vec4(1.0 - fragDepth, fragDepth, 1.0 - fragFaceStatus, fragFaceStatus);\n\t\treturn;\n}\n#endif";
 
 var depthPeelingMainSuffixChunk = "#ifdef DEPTH_PEELING\nthree_FragColor = clamp4( three_FragColor, 0.0, 1.0 );\nbool valid = (\n\t(0.0 <= three_FragColor.r && three_FragColor.r <= 1.0) &&\n\t(0.0 <= three_FragColor.g && three_FragColor.g <= 1.0) &&\n\t(0.0 <= three_FragColor.b && three_FragColor.b <= 1.0) &&\n\t(0.0 <= three_FragColor.a && three_FragColor.a <= 1.0)\n\t);\nif (!valid )\n\tthree_FragColor = vec4(1,0,0,1);\nif (fragDepth == nearestDepth) {\n\tvec4 farColor = three_FragColor;\n\tvec4 nearColor = outFrontColor;\n\tfloat nearLinAlpha = lin(nearColor.a); \n\tfloat farLinAlpha = lin(farColor.a); \n\tfloat alphaMultiplier = 1.0 - nearLinAlpha;\n\toutFrontColor.rgb = nonLin(lin(farColor.rgb) * farLinAlpha * alphaMultiplier +\n\t\tlin(nearColor.rgb) * nearLinAlpha);\n\toutFrontColor.a = nonLin(farLinAlpha * alphaMultiplier + nearLinAlpha);\n} else {\n\toutBackColor = three_FragColor;\n}\n#else\ngl_FragColor = three_FragColor;\t\n#endif";
 
@@ -23430,6 +23430,15 @@ void main() {
 }
 `;
 
+/*
+TODO:
+	Known defect - pass 0, depth write is not being written to. This makes pass 0 a NO OP.
+	After several days of investigation no explanation could be found for this and the algorithm
+	picked up correctly on pass 1. Ignoring this for now.
+	IT IS EXPECTED that nothing be written to the color buffers during pass 0, but it is expected that something be
+	written to the depth buffers.
+	
+ */
 class WebGLDepthPeeling {
 
 	constructor(renderer, numDepthPeelingPasses) {
@@ -23843,16 +23852,21 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 
 		}
 
-		function dumpAvgRange( filename, pixels, channel ) {
+		function dumpAvgRange( filename, pixels ) {
 
 			if (filename.indexOf('depth') === -1)
 				return;
 
-			var i, min = 1.0, max = -1.0;
+			var i, j, min = 1.0, max = -1.0;
 			const entries = pixels.length / 4;
 
 			for (i = 0; i < entries; i++) {
-				var val = pixels[4 * i + channel];
+				var val = -1;
+				for (j = 0; j < 3; j++) {
+					var v = pixels[4 * i + j] / 255.0;
+					if (v > val)
+						val = v;
+				}
 				if (val === 0 || val === 255)
 					continue;
 
@@ -23873,29 +23887,33 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 			log(str);
 		}
 
-		function dumpHistogram( filename, pixels, channel ) {
+		function dumpHistogram( filename, pixels ) {
 			if (filename.indexOf('depth') === -1)
 				return;
+			const numBins = 20;
 			var i, j;
 			const entries = pixels.length / 4;
 			var hist = [
 			];
-			const numBins = 20;
-				for (j = 0; j <= numBins; j++) {
-					hist.push( 0 );
+			for (j = 0; j <= numBins; j++) {
+				hist.push( 0 );
 			}
 
 			for (i = 0; i < entries; i++) {
 
-				var val = pixels[4 * i + channel] / 255.0;
+				var val = -1;
+				for (j = 0; j < 3; j++) {
+					var v = pixels[4 * i + j] / 255.0;
+					if (v > val)
+						val = v;
+				}
 				var binIdx = Math.trunc(numBins * val + 0.5);
 				hist[binIdx]++;
 
 			}
 
 			var str = '\n      Min/max data for ' + filename + '\n      ';
-			const ch = ['r', 'g', 'b', 'a'];
-			str += ch[channel] + '[';
+			str = '[';
 			for (i = 0; i < hist.length; i++ ) {
 				str += (hist[i] / entries);
 				if ( i != hist.length - 1 )
@@ -23949,8 +23967,8 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 
 			_gl.readPixels(0, 0, _this.bufferSize.width, _this.bufferSize.height, 6408, 5121, pixels);
 
-			dumpAvgRange(filename, pixels, 0);
-			dumpHistogram(filename, pixels, 0);
+			dumpAvgRange(filename, pixels);
+			dumpHistogram(filename, pixels);
 
 			const frameId = params.bufferId + '_' + params.mode;
 			if ( !_passFrames [ _passNum ] ) {

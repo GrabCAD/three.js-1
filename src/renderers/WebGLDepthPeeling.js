@@ -14,6 +14,15 @@ import Preprocessor from '@andrewray/glsl-preprocessor';
 import Jimp from 'jimp';
 import {fs} from 'fs';
 
+/*
+TODO:
+	Known defect - pass 0, depth write is not being written to. This makes pass 0 a NO OP.
+	After several days of investigation no explanation could be found for this and the algorithm
+	picked up correctly on pass 1. Ignoring this for now.
+	IT IS EXPECTED that nothing be written to the color buffers during pass 0, but it is expected that something be
+	written to the depth buffers.
+	
+ */
 class WebGLDepthPeeling {
 
 	constructor(renderer, numDepthPeelingPasses) {
