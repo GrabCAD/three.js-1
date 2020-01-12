@@ -66,6 +66,17 @@ class WebGLDepthPeeling {
 			_passFrameIndices,
 			_passNum = 0;
 
+		this.renderer = _renderer;
+
+		function log( str ) {
+			if ( _passFrames ) {
+
+				console.warn( 'pass#:' + _passNum + ' : ' + str);
+
+			}
+		}
+		this.log = log;
+
 		this.getNumDepthPeelingPasses = function () {
 			return this.numDepthPeelingPasses;
 		};
@@ -177,7 +188,7 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 			_gl.bindBuffer( _gl.ARRAY_BUFFER, _quadBuffer );
 			_gl.bufferData( _gl.ARRAY_BUFFER, quadVertices, _gl.STATIC_DRAW );
 
-		};
+		}
 
 		function drawInBufferToOutBuffer() {
 
@@ -188,26 +199,14 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 
 			_gl.drawArrays( _gl.TRIANGLES, 0, _numQuadVertices );
 
-		};
+		}
 
 		function createBuffers () {
 
-			_dpBuffers = new WebGLDPBuffers( _renderer );
+			_dpBuffers = new WebGLDPBuffers( _this );
 			setupQuads();
-/*
-			// 2 for ping-pong
-			// COLOR_ATTACHMENT0 - front color
-			// COLOR_ATTACHMENT1 - back color
-			_depthBuffers = [_gl.createFramebuffer(), _gl.createFramebuffer()];
-			_colorBuffers = [_gl.createFramebuffer(), _gl.createFramebuffer()];
-			_depthTarget = [_gl.createTexture(), _gl.createTexture()];
-			_frontColorTarget = [_gl.createTexture(), _gl.createTexture()];
-			_backColorTarget = [_gl.createTexture(), _gl.createTexture()];
 
-			_blendBackBuffer = _gl.createFramebuffer();
-			_blendBackTarget = _gl.createTexture();
-*/
-		};
+		}
 
 		function loadRequiredExtensions () {
 
@@ -351,195 +350,20 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 			return true; // Must resize
 
 		}
-/*
-		function populateParams ( params ) {
 
-			// Once an internal format is chosen, there is a table that determines the choice(es) for
-			// the format and type. The table is located at
-			// https://www.khronos.org/registry/webgl/specs/latest/2.0/#TEXTURE_TYPES_FORMATS_FROM_DOM_ELEMENTS_TABLE
-			// This code assures that types are in agreement.
-
-			if (params.internalFormat === _gl.RG32F ) {
-				params.format = _gl.RG;
-				params.type = _gl.FLOAT;
-			} else if (params.internalFormat === _gl.RGB16F ) {
-				params.format = _gl.RGB;
-				params.type = _gl.HALF_FLOAT;
-			} else if (params.internalFormat === _gl.RGB32F ) {
-				params.format = _gl.RGB;
-				params.type = _gl.FLOAT;
-			} else if (params.internalFormat === _gl.RGBA16F ) {
-				params.format = _gl.RGBA;
-				params.type = _gl.HALF_FLOAT;
-			} else if (params.internalFormat === _gl.RGBA32F ) {
-				params.format = _gl.RGBA;
-				params.type = _gl.FLOAT;
-			} else if (params.internalFormat === _gl.RGBA ) {
-				params.format = _gl.RGBA;
-				params.type = _gl.UNSIGNED_BYTE;
-			}
-
-			return params;
-
-		}
-*/
 		function resizeBuffer_ ( params ) {
 			_dpBuffers.resizeBuffer (params);
 		}
-/*
-		function resizeDepthBuffer_ ( texOffset, attachOffset, texture ) {
-			// The _gl version of these constants cause warnings in npm run build.
-			// Define our own locally to avoid this.
 
-			resizeBuffer_( {
-				texUnit: texOffset + attachOffset,
-				attachOffset: attachOffset,
-				texture: texture,
-				internalFormat: _gl.RGBA32F // TODO RGB32F is sufficient, but it generates and incomplete framebuffer error
-			} );
-		}
-
-		function resizeColorBuffer_ ( texOffset, attachOffset, texture) {
-			resizeBuffer_( {
-				texUnit: texOffset + attachOffset,
-				texture: texture,
-				attachOffset: attachOffset,
-				internalFormat: _gl.RGBA
-			} );
-
-		}
-
-		function bindColorBuffers_( pingPongIndex ) {
-
-			_gl.bindFramebuffer( _gl.FRAMEBUFFER, _colorBuffers[ pingPongIndex ] );
-			_gl.drawBuffers( [ _gl.COLOR_ATTACHMENT0, _gl.COLOR_ATTACHMENT0 + 1 ] );
-			_gl.framebufferTexture2D( _gl.FRAMEBUFFER, _gl.COLOR_ATTACHMENT0, _gl.TEXTURE_2D, _frontColorTarget[ pingPongIndex ], 0 );
-			_gl.framebufferTexture2D( _gl.FRAMEBUFFER, _gl.COLOR_ATTACHMENT0 + 1, _gl.TEXTURE_2D, _backColorTarget [ pingPongIndex ], 0 );
-
-		}
-
-		function checkFrameBuffer () {
-
-			// Debugging tests for the framebuffer. Disable unless you need it.
-			var status = _gl.checkFramebufferStatus( _gl.FRAMEBUFFER );
-
-			if ( status !== _gl.FRAMEBUFFER_COMPLETE ) {
-				if ( status === _gl.FRAMEBUFFER_INCOMPLETE_ATTACHMENT )
-					console.warn( 'FRAMEBUFFER_INCOMPLETE_ATTACHMENT' );
-				else if ( status === _gl.FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT )
-					console.warn( 'FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT' );
-				else if ( status === _gl.FRAMEBUFFER_INCOMPLETE_DIMENSIONS )
-					console.warn( 'FRAMEBUFFER_INCOMPLETE_DIMENSIONS' );
-				else if ( status === _gl.FRAMEBUFFER_UNSUPPORTED )
-					console.warn( 'FRAMEBUFFER_UNSUPPORTED' );
-				else if ( status === _gl.FRAMEBUFFER_INCOMPLETE_MULTISAMPLE )
-					console.warn( 'FRAMEBUFFER_INCOMPLETE_MULTISAMPLE' );
-			}
-
-		}
-
-		function resizeDepthBuffers_ ( pingPongIndex ) {
-
-			var texOffset = pingPongIndex * 3;
-
-			_gl.bindFramebuffer( _gl.FRAMEBUFFER, _depthBuffers[ pingPongIndex ] );
-			_gl.drawBuffers( [ _gl.COLOR_ATTACHMENT0, _gl.COLOR_ATTACHMENT0 + 1, _gl.COLOR_ATTACHMENT0 + 2 ] );
-			resizeDepthBuffer_( texOffset, _depthTexUnitOffset, _depthTarget[ pingPongIndex ] );
-			resizeColorBuffer_( texOffset, _frontColorTexUnitOffset, _frontColorTarget[ pingPongIndex ] );
-			resizeColorBuffer_( texOffset, _backColorTexUnitOffset, _backColorTarget[ pingPongIndex ] );
-
-			checkFrameBuffer();
-
-		}
-
-		function resizeBackBuffer_ () {
-
-			_gl.bindFramebuffer( _gl.FRAMEBUFFER, _blendBackBuffer );
-			resizeBuffer_( {
-				texUnit: 6,
-				texture: _blendBackTarget,
-				attachOffset: 0,
-				internalFormat: _gl.RGBA16F
-			} );
-
-			checkFrameBuffer();
-
-		}
-*/
 		this.resizeBuffers = function ( width, height ) {
 
 			if ( needToResizeBuffers(width, height) ) {
 
 				_dpBuffers.resize( _this.bufferSize );
-				/*
-				resizeDepthBuffers_( 0 );
-				bindColorBuffers_  ( 0 );
-
-				resizeDepthBuffers_( 1 );
-				bindColorBuffers_  ( 1 );
-
-				resizeBackBuffer_();
-*/
 			}
 
 		};
-/*
-		function bindDepthBufferTextures() {
 
-			_gl.activeTexture(_gl.TEXTURE0 + 0 + _depthTexUnitOffset);
-			_gl.bindTexture(_gl.TEXTURE_2D, _depthTarget[0]);
-
-			_gl.activeTexture(_gl.TEXTURE0 + 0 + _frontColorTexUnitOffset);
-			_gl.bindTexture(_gl.TEXTURE_2D, _frontColorTarget[0]);
-
-			_gl.activeTexture(_gl.TEXTURE0 + 0 + _backColorTexUnitOffset);
-			_gl.bindTexture(_gl.TEXTURE_2D, _backColorTarget[0]);
-
-			_gl.activeTexture(_gl.TEXTURE0 + 3 + _depthTexUnitOffset);
-			_gl.bindTexture(_gl.TEXTURE_2D, _depthTarget[1]);
-
-			_gl.activeTexture(_gl.TEXTURE0 + 3 + _frontColorTexUnitOffset);
-			_gl.bindTexture(_gl.TEXTURE_2D, _frontColorTarget[1]);
-
-			_gl.activeTexture(_gl.TEXTURE0 + 3 + _backColorTexUnitOffset);
-			_gl.bindTexture(_gl.TEXTURE_2D, _backColorTarget[1]);
-
-			_gl.activeTexture( _gl.TEXTURE0 + _blendBackTexUnit );
-			_gl.bindTexture( _gl.TEXTURE_2D, _blendBackTarget );
-
-		};
-
-		function clearBuffersForDraw_ ( init ) {
-
-			const DEPTH_CLEAR_VALUE = -99999.0;
-			const MAX_DEPTH_ = 1.0; // furthest
-			const MIN_DEPTH_ = 0.0; // nearest
-
-			_gl.bindFramebuffer(_gl.DRAW_FRAMEBUFFER, _depthBuffers[_writeId]);
-			_gl.clearColor(DEPTH_CLEAR_VALUE, DEPTH_CLEAR_VALUE, 0, 0);
-			_gl.clear(_gl.COLOR_BUFFER_BIT);
-
-			_gl.bindFramebuffer(_gl.DRAW_FRAMEBUFFER, _colorBuffers[_writeId]);
-			_gl.clearColor(0, 0, 0, 0);
-			_gl.clear(_gl.COLOR_BUFFER_BIT);
-
-			if (init) {
-
-				_gl.bindFramebuffer(_gl.DRAW_FRAMEBUFFER, _depthBuffers[_readId]);
-				_gl.clearColor(-MIN_DEPTH_, MAX_DEPTH_, 0, 0);
-				_gl.clear(_gl.COLOR_BUFFER_BIT);
-
-				_gl.bindFramebuffer(_gl.DRAW_FRAMEBUFFER, _colorBuffers[_readId]);
-				_gl.clearColor(0, 0, 0, 0);
-				_gl.clear(_gl.COLOR_BUFFER_BIT);
-			}
-
-			_gl.bindFramebuffer(_gl.DRAW_FRAMEBUFFER, _blendBackBuffer);
-			_gl.clearColor(0, 0, 0, 0);
-			_gl.clear(_gl.COLOR_BUFFER_BIT);
-
-		};
-*/
 		// gross overkill, as we should never have more than one
 		var _currentProgramStack = [];
 
@@ -559,7 +383,7 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 
 		}
 
-		this.endPass = function () {
+		this.endDrawPass = function () {
 
 			pushCurrentProgram();
 
@@ -662,9 +486,9 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 			} else {
 				var average = (min + max) / 2;
 				var range = (max - min);
-				str = 'Min/max data for ' + filename + ': average = ' + average + ', range = ' + range;
+				str = '\n      Min/max data for ' + filename + ': average = ' + average + ', range = ' + range;
 			}
-			console.warn(str);
+			log(str);
 		}
 
 		function dumpHistogram( filename, pixels, channel ) {
@@ -687,7 +511,7 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 
 			}
 
-			var str = 'Min/max data for ' + filename + '\n';
+			var str = '\n      Min/max data for ' + filename + '\n      ';
 			const ch = ['r', 'g', 'b', 'a'];
 			str += ch[channel] + '[';
 			for (i = 0; i < hist.length; i++ ) {
@@ -697,7 +521,7 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 			}
 			str += ']';
 
-			console.warn(str);
+			log(str);
 		}
 
 		function captureImageForDump( params) {
@@ -742,7 +566,7 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 
 
 			_gl.readPixels(0, 0, _this.bufferSize.width, _this.bufferSize.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-			
+
 			dumpAvgRange(filename, pixels, 0);
 			dumpHistogram(filename, pixels, 0);
 
@@ -857,7 +681,7 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 
 			if ( ( _debugDrawBuffersDelay > 0 ) && ( _passNum === 0 ) && ( _testTick++ >= _debugDrawBuffersDelay ) ) {
 				_passFrames = new Array( this.numDepthPeelingPasses );
-				console.warn('Capturing depth peeling frames');
+				log('Capturing depth peeling frames');
 				_testTick = 0;
 			}
 			_dpBuffers.beginDrawPass( _passNum, null ); // _passFrames ? captureImageForDump : null );

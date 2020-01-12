@@ -12,6 +12,8 @@ outBackColor = vec4(0.0);
 
 // write out next peel. -MAX_DEPTH is effectively a NO OP
 depth = vec4( -MAX_DEPTH );
+depth = vec4(0.675);
+return;
 
 // The '-' on near makes a max blend behave like a negative blend
 // both depths are converging toward each other

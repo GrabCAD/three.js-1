@@ -1276,7 +1276,7 @@ function WebGLRenderer( parameters ) {
 
 					dpd.beginDrawPass( );
 					this.renderInner( currentRenderList, scene, camera, forceClear );
-					dpd.endPass( );
+					dpd.endDrawPass( );
 
 				}
 				dpd.endDrawLoop( );

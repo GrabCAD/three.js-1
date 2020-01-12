@@ -20,15 +20,21 @@ function DPTestFlags () {
 }
 
 class WebGLDPBuffers {
-	constructor( renderer ) {
+	constructor( depthPeeling ) {
 		const
 			_this = this,
-			_renderer = renderer,
-			_gl = renderer.context,
-			_state = renderer.state;
+			_renderer = depthPeeling.renderer,
+			_gl = _renderer.context,
+			_state = _renderer.state,
+			_depthPeeling = depthPeeling;
 
 		var
-			_bufferSize;
+			_bufferSize,
+			_passNum;
+
+		function log ( str ) {
+			_depthPeeling.log(str);
+		}
 
 		function populateParams ( params ) {
 
@@ -101,7 +107,7 @@ class WebGLDPBuffers {
 				0
 			);
 		}
-
+/*
 		function bindColorBuffers_( pingPongIndex ) {
 
 			_gl.bindFramebuffer( _gl.FRAMEBUFFER, _colorBuffers[ pingPongIndex ] );
@@ -110,7 +116,7 @@ class WebGLDPBuffers {
 			_gl.framebufferTexture2D( _gl.FRAMEBUFFER, _gl.COLOR_ATTACHMENT0 + 1, _gl.TEXTURE_2D, _backColorTarget [ pingPongIndex ], 0 );
 
 		}
-
+*/
 		function checkCurrentFrameBuffer () {
 
 			// Debugging tests for the framebuffer. Disable unless you need it.
@@ -150,25 +156,35 @@ class WebGLDPBuffers {
 					_depthTarget = _gl.createTexture(),
 					_frontColorTarget = _gl.createTexture(),
 					_backColorTarget = _gl.createTexture(),
-					_mode = 'unknown';
+					_mode = 'unknown',
+					_id = id;
 
 				this.depthTarget = _depthTarget;
 				this.frontColorTarget = _frontColorTarget;
 				this.backColorTarget = _backColorTarget;
 
+				log('_bindFramebuffer _depthBuffer');
 				_gl.bindFramebuffer( _gl.FRAMEBUFFER, _depthBuffer );
 				_gl.drawBuffers( [ _gl.COLOR_ATTACHMENT0, _gl.COLOR_ATTACHMENT1, _gl.COLOR_ATTACHMENT2 ] );
+
+				log('_bindFramebuffer _colorBuffer');
 				_gl.bindFramebuffer( _gl.FRAMEBUFFER, _colorBuffer );
 				_gl.drawBuffers( [ _gl.COLOR_ATTACHMENT0, _gl.COLOR_ATTACHMENT1 ] );
 
+				function log ( str ) {
+					_depthPeeling.log( '{' + _id + '-' + _mode + '}: ' + str);
+				}
+
 				function bindColorBuffer( ) {
 
+					log('bindTexures _frontColor, _backColor to units 0, 1');
 					_gl.activeTexture( _gl.TEXTURE0 );
 					_gl.bindTexture( _gl.TEXTURE_2D, _frontColorTarget );
 					_gl.activeTexture( _gl.TEXTURE1 );
 					_gl.bindTexture( _gl.TEXTURE_2D, _backColorTarget );
 
 					// _gl.drawBuffers makes a permanent state change on the frameBuffer, it only needs to be done once
+					log('_bindFramebuffer _colorBuffer');
 					_gl.bindFramebuffer( _gl.FRAMEBUFFER, _colorBuffer );
 
 					// This may not be needed
@@ -179,6 +195,7 @@ class WebGLDPBuffers {
 
 				function bindDepthFrameBuffer( ) {
 
+					log('bindTexures _depthTarget, _frontColor, _backColor to units 0, 1, 2');
 					_gl.activeTexture( _gl.TEXTURE0 );
 					_gl.bindTexture( _gl.TEXTURE_2D, _depthTarget );
 					_gl.activeTexture( _gl.TEXTURE1 );
@@ -187,6 +204,7 @@ class WebGLDPBuffers {
 					_gl.bindTexture( _gl.TEXTURE_2D, _backColorTarget );
 
 					// _gl.drawBuffers makes a permanent state change on the frameBuffer, it only needs to be done once
+					log('_bindFramebuffer _depthBuffer');
 					_gl.bindFramebuffer( _gl.FRAMEBUFFER, _depthBuffer );
 
 					// This may not be needed
@@ -223,27 +241,26 @@ class WebGLDPBuffers {
 					checkCurrentFrameBuffer();
 				};
 
-				this.bindForWriting = function ( passNum ) {
-//					console.warn("\nPass: " + passNum + " setting write textures (0,1,2) for " + this.id + "\n" );
-					_mode = 'write';
-					_gl.activeTexture(_gl.TEXTURE0 );
-					_gl.bindTexture(_gl.TEXTURE_2D, _depthTarget);
+				this.setMode = function( mode ) {
+					_mode = mode;
+				}
 
-					_gl.activeTexture(_gl.TEXTURE1 );
-					_gl.bindTexture(_gl.TEXTURE_2D, _frontColorTarget);
-
-					_gl.activeTexture(_gl.TEXTURE2 );
-					_gl.bindTexture(_gl.TEXTURE_2D, _backColorTarget);
-
+				this.bindForWriting = function ( ) {
+					if (_mode !== 'write') {
+						throw 'binding for write when not write buffer';
+					}
+					log( 'bindForWriting' );
 					bindDepthFrameBuffer();
 				};
 
-				this.bindForReading = function ( passNum ) {
-					_mode = 'read';
+				this.bindForReading = function ( ) {
 					const program = _state.getCurrentProgram();
 					if (program) {
-//						console.warn("\nPass: " + passNum + " setting read textures (3,4) for " + this.id + "\n");
 
+						if (_mode !== 'read') {
+							throw 'binding for read when not read buffer';
+						}
+						log('bindTexures _depthTarget, _frontColor to units 3, 4');
 						_gl.activeTexture(_gl.TEXTURE3);
 						_gl.bindTexture(_gl.TEXTURE_2D, _depthTarget);
 
@@ -257,12 +274,6 @@ class WebGLDPBuffers {
 					const program = _state.getCurrentProgram();
 					if ( program ) {
 
-						_gl.activeTexture(_gl.TEXTURE3 );
-						_gl.bindTexture(_gl.TEXTURE_2D, _depthTarget);
-
-						_gl.activeTexture(_gl.TEXTURE4 );
-						_gl.bindTexture(_gl.TEXTURE_2D, _frontColorTarget);
-
 						const depthBufferInLoc = _gl.getUniformLocation(program, "depthBufferIn");
 						const frontColorInLoc = _gl.getUniformLocation(program, "frontColorIn");
 
@@ -274,19 +285,24 @@ class WebGLDPBuffers {
 
 				this.clear = function ( nearDepth, farDepth ) {
 
+					log(' this.clear(' + nearDepth + ', ' + farDepth + ')' );
 					// Order is important.
 					// TBD Potential optimization
 
 					// This will clear ALL three textures with the depth values
+					log('bindFramebuffer _depthBuffer');
+
 					_gl.bindFramebuffer(_gl.DRAW_FRAMEBUFFER, _depthBuffer );
 					_gl.clearColor(nearDepth, farDepth, 0, 0);
 					_gl.clear(_gl.COLOR_BUFFER_BIT);
 
 					// This will clear just the two color textures
+					log('bindFramebuffer _colorBuffer');
 					_gl.bindFramebuffer(_gl.DRAW_FRAMEBUFFER, _colorBuffer );
 					_gl.clearColor(0, 0, 0, 0);
 					_gl.clear(_gl.COLOR_BUFFER_BIT);
 
+					log('bindFramebuffer null ');
 					_gl.bindFramebuffer(_gl.DRAW_FRAMEBUFFER, null );
 
 				};
@@ -358,6 +374,7 @@ class WebGLDPBuffers {
 			_readBufs.resize();
 			_writeBufs.resize();
 
+			log('bindFramebuffer _blendBackBuffer ');
 			_gl.bindFramebuffer( _gl.FRAMEBUFFER, _blendBackBuffer );
 			resizeBuffer_( {
 				textureUnitId: _tuIdBlendBack,
@@ -366,6 +383,7 @@ class WebGLDPBuffers {
 				internalFormat: _gl.RGBA
 			} );
 
+			log('bindFramebuffer null ');
 			_gl.bindFramebuffer( _gl.FRAMEBUFFER, null );
 
 /*
@@ -380,6 +398,7 @@ class WebGLDPBuffers {
 			// An arbitrarily large negative number that will be less than all other numbers;
 			const DEPTH_CLEAR_VALUE = -99999.0;
 
+			log('clearWriteBuffers');
 			_writeBufs.clear(DEPTH_CLEAR_VALUE, DEPTH_CLEAR_VALUE);
 
 			if ( captureImageForDump ) {
@@ -400,21 +419,25 @@ class WebGLDPBuffers {
 				});
 			}
 
+			log('bindTexures _blendBackTarget to units 5');
 			_gl.activeTexture( _gl.TEXTURE5 );
 			_gl.bindTexture( _gl.TEXTURE_2D, _blendBackTarget );
 
+			log('_bindFramebuffer _blendBackBuffer ');
 			_gl.bindFramebuffer(_gl.DRAW_FRAMEBUFFER, _blendBackBuffer);
 			_gl.clearColor(0, 0, 0, 0);
 			_gl.clear(_gl.COLOR_BUFFER_BIT);
 
+			log('_bindFramebuffer null');
 			_gl.bindFramebuffer( _gl.FRAMEBUFFER, null );
 
 		}
 
-		function clearReadBuffers ( isFirstPass ) {
+		function clearReadBuffers ( ) {
 
-			if ( isFirstPass ) {
+			if ( _passNum === 0 ) {
 
+				log('clearReadBuffers');
 				_readBufs.clear(1.0, 1.0);
 
 			}
@@ -423,20 +446,24 @@ class WebGLDPBuffers {
 
 		function swapBufferSets ( ) {
 
+			log('Swapping read and write buffers.');
 			const temp = _readBufs;
 			_readBufs = _writeBufs;
 			_writeBufs = temp;
+			_readBufs.setMode( 'read' );
+			_writeBufs.setMode( 'write' );
 
 		}
 
 		this.beginDrawPass = function( passNum, captureImageForDump ) {
 
+			_passNum = passNum;
+			log('beginDrawPass');
 			swapBufferSets();
-//			console.warn("\n_readBufs: " + _readBufs.id + "\n_writeBufs: " + _writeBufs.id );
+			clearReadBuffers( );
 			clearWriteBuffers(captureImageForDump);
-			clearReadBuffers( passNum === 0 );
-			_readBufs.bindForReading( passNum ); // Probably redundant, but leaving it for now.
-			_writeBufs.bindForWriting( passNum );
+			_readBufs.bindForReading( ); // Probably redundant, but leaving it for now.
+			_writeBufs.bindForWriting( );
 			_gl.blendEquation( _gl.MAX );
 			_state.enable( _gl.BLEND );
 			_state.disable( _gl.DEPTH_TEST );
@@ -449,6 +476,10 @@ class WebGLDPBuffers {
 
 		this.getBlendBackBuffer = function () {
 			return _blendBackBuffer;
+		};
+
+		this.getBlendBackTarget = function () {
+			return _blendBackTarget;
 		};
 
 		// This returns the texture unit id of the back color texture that was just written to
