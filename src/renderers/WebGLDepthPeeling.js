@@ -461,7 +461,7 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 
 		}
 
-		function dumpAvgRange( filename, pixels, channel ) {
+		function dumpAvgRange( filename, pixels ) {
 
 			if (filename.indexOf('depth') === -1)
 				return;
@@ -470,7 +470,12 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 			const entries = pixels.length / 4;
 
 			for (i = 0; i < entries; i++) {
-				var val = pixels[4 * i + channel];
+				var val = -1;
+				for (j = 0; j < 3; j++) {
+					var v = pixels[4 * i + j] / 255.0;
+					if (v > val)
+						val = v;
+				}
 				if (val === 0 || val === 255)
 					continue;
 
@@ -491,29 +496,33 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 			log(str);
 		}
 
-		function dumpHistogram( filename, pixels, channel ) {
+		function dumpHistogram( filename, pixels ) {
 			if (filename.indexOf('depth') === -1)
 				return;
+			const numBins = 20;
 			var i, j;
 			const entries = pixels.length / 4;
 			var hist = [
 			];
-			const numBins = 20;
-				for (j = 0; j <= numBins; j++) {
-					hist.push( 0 );
+			for (j = 0; j <= numBins; j++) {
+				hist.push( 0 );
 			}
 
 			for (i = 0; i < entries; i++) {
 
-				var val = pixels[4 * i + channel] / 255.0;
+				var val = -1;
+				for (j = 0; j < 3; j++) {
+					var v = pixels[4 * i + j] / 255.0;
+					if (v > val)
+						val = v;
+				}
 				var binIdx = Math.trunc(numBins * val + 0.5);
 				hist[binIdx]++;
 
 			}
 
 			var str = '\n      Min/max data for ' + filename + '\n      ';
-			const ch = ['r', 'g', 'b', 'a'];
-			str += ch[channel] + '[';
+			str = '[';
 			for (i = 0; i < hist.length; i++ ) {
 				str += (hist[i] / entries);
 				if ( i != hist.length - 1 )
@@ -567,8 +576,8 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 
 			_gl.readPixels(0, 0, _this.bufferSize.width, _this.bufferSize.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
 
-			dumpAvgRange(filename, pixels, 0);
-			dumpHistogram(filename, pixels, 0);
+			dumpAvgRange(filename, pixels);
+			dumpHistogram(filename, pixels);
 
 			const frameId = params.bufferId + '_' + params.mode;
 			if ( !_passFrames [ _passNum ] ) {
