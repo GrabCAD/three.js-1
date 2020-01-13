@@ -417,6 +417,21 @@ class WebGLDPBuffers {
 					mode: 'preWrite',
 					texture: _writeBufs.depthTarget
 				});
+
+				captureImageForDump({
+					bufferId: tf.drawBackColor,
+					testMode: tf.testModeDrawColor,
+					mode: 'preWrite',
+					texture: _writeBufs.backColorTarget
+				});
+
+				captureImageForDump({
+					bufferId: tf.drawFrontColor,
+					testMode: tf.testModeDrawColor,
+					mode: 'preWrite',
+					texture: _writeBufs.frontColorTarget
+				});
+
 			}
 
 			log('bindTexures _blendBackTarget to units 5');

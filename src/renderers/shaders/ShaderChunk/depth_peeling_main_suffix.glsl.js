@@ -28,6 +28,7 @@ if (fragDepth == nearestDepth) {
 	outFrontColor.rgb = nonLin(lin(farColor.rgb) * farLinAlpha * alphaMultiplier +
 		lin(nearColor.rgb) * nearLinAlpha);
 	outFrontColor.a = nonLin(farLinAlpha * alphaMultiplier + nearLinAlpha);
+	outFrontColor.a = 1.0;
 } else {
 	outBackColor = three_FragColor;
 }

@@ -21,7 +21,7 @@ TODO:
 	picked up correctly on pass 1. Ignoring this for now.
 	IT IS EXPECTED that nothing be written to the color buffers during pass 0, but it is expected that something be
 	written to the depth buffers.
-	
+
  */
 class WebGLDepthPeeling {
 
@@ -684,7 +684,9 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 			// So, we push the current program and pop it on exit.
 			if ( _passFrames ) {
 
-				_passFrames[ _passNum ] = [];
+				if (!_passFrames[ _passNum ]) {
+					_passFrames[ _passNum ] = [];
+				}
 				_dpBuffers.getAllFrames( captureImageForDump );
 
 			}
@@ -697,12 +699,12 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 			_readId = _passNum % 2;
 			_writeId = 1 - _readId;
 
-			if ( ( _debugDrawBuffersDelay > 0 ) && ( _passNum === 0 ) && ( _testTick++ >= _debugDrawBuffersDelay ) ) {
+			if ( !_passFrames && ( _debugDrawBuffersDelay > 0 ) && ( _passNum === 0 ) && ( _testTick++ >= _debugDrawBuffersDelay ) ) {
 				_passFrames = new Array( this.numDepthPeelingPasses );
 				log('Capturing depth peeling frames');
 				_testTick = 0;
 			}
-			_dpBuffers.beginDrawPass( _passNum, null ); // _passFrames ? captureImageForDump : null );
+			_dpBuffers.beginDrawPass( _passNum, _passFrames ? captureImageForDump : null );
 
 			/*
 			 bindDepthBufferTextures();

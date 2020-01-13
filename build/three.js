@@ -23179,6 +23179,21 @@
 						mode: 'preWrite',
 						texture: _writeBufs.depthTarget
 					});
+
+					captureImageForDump({
+						bufferId: tf.drawBackColor,
+						testMode: tf.testModeDrawColor,
+						mode: 'preWrite',
+						texture: _writeBufs.backColorTarget
+					});
+
+					captureImageForDump({
+						bufferId: tf.drawFrontColor,
+						testMode: tf.testModeDrawColor,
+						mode: 'preWrite',
+						texture: _writeBufs.frontColorTarget
+					});
+
 				}
 
 				log('bindTexures _blendBackTarget to units 5');
@@ -23303,7 +23318,7 @@
 
 	var depthPeelingMainPrefixChunk = "#ifdef DEPTH_PEELING\nfloat fragDepth = gl_FragCoord.z;\nivec2 fragCoord = ivec2(gl_FragCoord.xy);\nvec4 lastDepth = texelFetch(depthBufferIn, fragCoord, 0);\noutFrontColor = texelFetch(frontColorIn, fragCoord, 0);\noutBackColor = vec4(0.0);\ndepth = vec4( -MAX_DEPTH );\nfloat nearestDepth       = 1.0 - lastDepth.x;\nfloat furthestDepth      = lastDepth.y;\nfloat nearestFaceStatus  = 1.0 - lastDepth.z;\nfloat furthestFaceStatus = lastDepth.w;\nfloat fragFaceStatus = DP_FACE_STATUS_NONE;\nif (depthLess(fragDepth, fragFaceStatus, nearestDepth, nearestFaceStatus) || \n    depthGreater(fragDepth, fragFaceStatus, furthestDepth, furthestFaceStatus)) {\n\t\treturn;\n}\nif (depthGreater(fragDepth, fragFaceStatus, nearestDepth, nearestFaceStatus) && \n\t\tdepthLess(fragDepth, fragFaceStatus, furthestDepth, furthestFaceStatus)) {\n\t\tdepth = vec4(1.0 - fragDepth, fragDepth, 1.0 - fragFaceStatus, fragFaceStatus);\n\t\treturn;\n}\n#endif";
 
-	var depthPeelingMainSuffixChunk = "#ifdef DEPTH_PEELING\nthree_FragColor = clamp4( three_FragColor, 0.0, 1.0 );\nbool valid = (\n\t(0.0 <= three_FragColor.r && three_FragColor.r <= 1.0) &&\n\t(0.0 <= three_FragColor.g && three_FragColor.g <= 1.0) &&\n\t(0.0 <= three_FragColor.b && three_FragColor.b <= 1.0) &&\n\t(0.0 <= three_FragColor.a && three_FragColor.a <= 1.0)\n\t);\nif (!valid )\n\tthree_FragColor = vec4(1,0,0,1);\nif (fragDepth == nearestDepth) {\n\tvec4 farColor = three_FragColor;\n\tvec4 nearColor = outFrontColor;\n\tfloat nearLinAlpha = lin(nearColor.a); \n\tfloat farLinAlpha = lin(farColor.a); \n\tfloat alphaMultiplier = 1.0 - nearLinAlpha;\n\toutFrontColor.rgb = nonLin(lin(farColor.rgb) * farLinAlpha * alphaMultiplier +\n\t\tlin(nearColor.rgb) * nearLinAlpha);\n\toutFrontColor.a = nonLin(farLinAlpha * alphaMultiplier + nearLinAlpha);\n} else {\n\toutBackColor = three_FragColor;\n}\n#else\ngl_FragColor = three_FragColor;\t\n#endif";
+	var depthPeelingMainSuffixChunk = "#ifdef DEPTH_PEELING\nthree_FragColor = clamp4( three_FragColor, 0.0, 1.0 );\nbool valid = (\n\t(0.0 <= three_FragColor.r && three_FragColor.r <= 1.0) &&\n\t(0.0 <= three_FragColor.g && three_FragColor.g <= 1.0) &&\n\t(0.0 <= three_FragColor.b && three_FragColor.b <= 1.0) &&\n\t(0.0 <= three_FragColor.a && three_FragColor.a <= 1.0)\n\t);\nif (!valid )\n\tthree_FragColor = vec4(1,0,0,1);\nif (fragDepth == nearestDepth) {\n\tvec4 farColor = three_FragColor;\n\tvec4 nearColor = outFrontColor;\n\tfloat nearLinAlpha = lin(nearColor.a); \n\tfloat farLinAlpha = lin(farColor.a); \n\tfloat alphaMultiplier = 1.0 - nearLinAlpha;\n\toutFrontColor.rgb = nonLin(lin(farColor.rgb) * farLinAlpha * alphaMultiplier +\n\t\tlin(nearColor.rgb) * nearLinAlpha);\n\toutFrontColor.a = nonLin(farLinAlpha * alphaMultiplier + nearLinAlpha);\n\toutFrontColor.a = 1.0;\n} else {\n\toutBackColor = three_FragColor;\n}\n#else\ngl_FragColor = three_FragColor;\t\n#endif";
 
 	var srcVertexShaderQuad = /* glsl */ `#version 300 es
 in vec4 inPosition;
@@ -23378,7 +23393,7 @@ void renderDepth(int testMode) {
 		case testFlagDrawDepthNear:
 			depth = 1.0 - depthQuad.x;
 			channel = vec3(1,0,0);
-			CAL_INTEN(0.675, 0.01); // Determined by sampling the output image
+			CAL_INTEN(0.68, 0.01); // Determined by sampling the output image
 			intensity = 1.0 - intensity;
 			break;
 
@@ -23442,7 +23457,7 @@ void main() {
 		picked up correctly on pass 1. Ignoring this for now.
 		IT IS EXPECTED that nothing be written to the color buffers during pass 0, but it is expected that something be
 		written to the depth buffers.
-		
+
 	 */
 	class WebGLDepthPeeling {
 
@@ -24071,7 +24086,9 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 				// So, we push the current program and pop it on exit.
 				if ( _passFrames ) {
 
-					_passFrames[ _passNum ] = [];
+					if (!_passFrames[ _passNum ]) {
+						_passFrames[ _passNum ] = [];
+					}
 					_dpBuffers.getAllFrames( captureImageForDump );
 
 				}
@@ -24082,12 +24099,12 @@ float fragFaceStatus = DP_FACE_STATUS_NONE;
 
 				_passNum++;
 
-				if ( _passNum === 0 && ( _testTick++ >= _debugDrawBuffersDelay ) ) {
+				if ( !_passFrames && ( _debugDrawBuffersDelay > 0 ) && ( _passNum === 0 ) && ( _testTick++ >= _debugDrawBuffersDelay ) ) {
 					_passFrames = new Array( this.numDepthPeelingPasses );
 					log('Capturing depth peeling frames');
 					_testTick = 0;
 				}
-				_dpBuffers.beginDrawPass( _passNum, null ); // _passFrames ? captureImageForDump : null );
+				_dpBuffers.beginDrawPass( _passNum, _passFrames ? captureImageForDump : null );
 
 				/*
 				 bindDepthBufferTextures();

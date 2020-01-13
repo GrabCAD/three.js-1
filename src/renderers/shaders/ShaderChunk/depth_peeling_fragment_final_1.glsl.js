@@ -54,7 +54,7 @@ void renderDepth(int testMode) {
 		case testFlagDrawDepthNear:
 			depth = 1.0 - depthQuad.x;
 			channel = vec3(1,0,0);
-			CAL_INTEN(0.675, 0.01); // Determined by sampling the output image
+			CAL_INTEN(0.68, 0.01); // Determined by sampling the output image
 			intensity = 1.0 - intensity;
 			break;
 
